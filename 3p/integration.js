@@ -31,6 +31,7 @@ import {endsWith} from '../src/string';
 import {parseUrl, getSourceUrl, isProxyOrigin} from '../src/url';
 import {initLogConstructor, user} from '../src/log';
 import {getMode} from '../src/mode';
+import {getHTML} from '../src/getHTML';
 
 // 3P - please keep in alphabetic order
 import {facebook} from './facebook';
@@ -385,6 +386,7 @@ window.draw3p = function(opt_configCallback, opt_allowed3pTypes,
     window.context.reportRenderedEntityIdentifier =
         reportRenderedEntityIdentifier;
     window.context.computeInMasterFrame = computeInMasterFrame;
+    window.context.getHTML = getHTML;
     delete data._context;
     manageWin(window);
     installEmbedStateListener();
