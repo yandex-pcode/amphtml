@@ -35,7 +35,7 @@ function appendToResult (node, attrs, result) {
            appendToResult(childNodes[i], attrs, result);
         }
 
-        result.push('</' + node.tagName.toLowerCase() + '>');
+        result.push(`</${node.tagName.toLowerCase()}>`);
     }
 }
 
@@ -51,7 +51,7 @@ function appendOpenTag (node, attrs, result) {
 
     attrs.forEach(function (attr) {
         if (node.hasAttribute(attr)) {
-            result.push(' ' + attr + '="' + node.getAttribute(attr) + '"');
+            result.push(` ${attr}="${node.getAttribute(attr)}"`);
         }
     });
 
