@@ -16,26 +16,36 @@ export function getHTML (root, attrs, callback) {
 
 
 /**
- *
  * @param {HTMLElement} node
  * @param {String[]} attrs
  * @param {String[]} result
  */
 function appendToResult (node, attrs, result) {
-    if (node.nodeType === Node.TEXT_NODE) {
-        result.push(node.textContent);
-        return;
+    let stack = [];
+
+    if (!node) {
+        return result;
     }
 
-    if (node && excludedTags.indexOf(node.tagName) === -1 && node.innerText) {
-        appendOpenTag(node, attrs, result);
+    stack.push(node);
 
-        let childNodes = node.childNodes;
-        for (let i = 0; i < childNodes.length; i++) {
-           appendToResult(childNodes[i], attrs, result);
+    while (stack.length > 0) {
+        node = stack.pop();
+
+        if (typeof node === 'string') {
+            result.push(node);
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            result.push(node.textContent);
+        } else if (node && excludedTags.indexOf(node.tagName) === -1 && node.innerText) {
+            appendOpenTag(node, attrs, result);
+            stack.push(`</${node.tagName.toLowerCase()}>`);
+
+            if (node.childNodes && node.childNodes.length > 0) {
+                for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                    stack.push(node.childNodes[i]);
+                }
+            }
         }
-
-        result.push(`</${node.tagName.toLowerCase()}>`);
     }
 }
 
