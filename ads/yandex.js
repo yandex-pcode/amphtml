@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import {loadScript, validateData} from '../3p/3p';
+
+const n = 'yandexContextAsyncCallbacks';
+const renderTo = 'yandex_rtb';
 
 /**
  * @param {!Window} global
@@ -23,56 +25,46 @@ import {loadScript, validateData} from '../3p/3p';
 export function yandex(global, data) {
     validateData(data, ['blockId'], ['data', 'isAdfox']);
 
-    setAdToQueue(global, data);
-    loadContext(global);
+    addToQueue(global, data);
+    loadScript(global, 'https://an.yandex.ru/system/context_amp.js');
 }
 
 /**
  * @param {!Window} global
  * @param {!Object} data
  */
-function setAdToQueue(global, data) {
-    const n = 'yandexContextAsyncCallbacks';
-
-    global[n] = [];
+function addToQueue(global, data) {
+    global[n] = global[n] || [];
     global[n].push(() => {
-        const containerName = 'yandex_rtb';
 
         // Create container
-        createContainer(global, containerName);
+        createContainer(global, renderTo);
 
-        // Ahow Ad in container
+        // Show Ad in container
         Ya.Context.AdvManager.render({
             blockId: data.blockId,
             statId: data.statId,
-            renderTo: containerName,
+            renderTo: renderTo,
             data: data.data,
             async: true,
             onRender: () => {
-                window.context.renderStart();
-
                 // Move adfox queue
                 if (data.isAdfox && window.Ya.adfoxCode.onRender) {
                     window.Ya.adfoxCode.onRender();
                 }
             }
-        }, () => window.context.noContentAvailable());
+        }, () => {
+            window.context.noContentAvailable()
+        });
     });
 }
 
 /**
- * @param {!Window} global
- */
-function loadContext(global) {
-    loadScript(global, 'https://an.yandex.ru/system/context.js');
-}
-
-/**
  * @param {?Window} global
- * @param {string} name
+ * @param {string} id
  */
-function createContainer(global, name) {
+function createContainer(global, id) {
     const d = global.document.createElement('div');
-    d.id = name;
+    d.id = id;
     global.document.getElementById('c').appendChild(d);
 }
