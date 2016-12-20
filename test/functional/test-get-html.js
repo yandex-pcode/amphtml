@@ -26,7 +26,7 @@ const template =`<div id="wrapper">
     </div>
 `;
 
-import {getHTML} from '../../src/getHTML';
+import {getHTML} from '../../src/get-html';
 
 describe('getHTML', () => {
     let element;
