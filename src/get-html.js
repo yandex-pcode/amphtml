@@ -27,9 +27,13 @@ export function getHTML (selector, attrs, callback) {
     const root = document.querySelector(selector);
     let result = [];
 
-    appendToResult(root, attrs, result);
+    if (root) {
+        appendToResult(root, attrs, result);
+    }
 
-    callback(result.join('').replace(/\s{2,}/g, ' '));
+    if (typeof callback === 'function') {
+        callback(result.join('').replace(/\s{2,}/g, ' '));
+    }
 }
 
 /**
@@ -75,7 +79,7 @@ function appendToResult (node, attrs, result) {
  * @param {String[]} result
  */
 function appendOpenTag (node, attrs, result) {
-    result.push('<' + node.tagName.toLowerCase());
+    result.push(`<${node.tagName.toLowerCase()}`);
 
     attrs.forEach(function (attr) {
         if (node.hasAttribute(attr)) {

@@ -41,30 +41,27 @@ describe('getHTML', () => {
         document.body.removeChild(element);
     });
 
-    it('should correctly work with empty second parameter', () => {
-        let content;
+    it('should correctly works with empty second parameter', () => {
         getHTML('#wrapper', [], function (result) {
-            content = result;
+            expect(result).to.equal('<div><div>Lorem ipsum</div> dolor sit amet </div>');
         });
-
-        expect(content).to.equal('<div><div>Lorem ipsum</div> dolor sit amet </div>');
     });
 
-    it('should correctly work with attributes array', () => {
-        let content;
+    it('should correctly works with attributes array', () => {
         getHTML('#wrapper', ['class', 'id'], function (result) {
-            content = result;
+            expect(result).to.equal('<div id="wrapper"><div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
         });
-
-        expect(content).to.equal('<div id="wrapper"><div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
     });
 
-    it('should correctly work with attributes array', () => {
-        let content;
+    it('should correctly works with attributes array', () => {
         getHTML('.tmp', ['class', 'id'], function (result) {
-            content = result;
+            expect(result).to.equal('<div class="tmp">Lorem ipsum</div>');
         });
+    });
 
-        expect(content).to.equal('<div class="tmp">Lorem ipsum</div>');
+    it('should correctly work with wrong selector', () => {
+        getHTML('.no-such-class', ['class', 'id'], function (result) {
+            expect(result).to.equal('');
+        });
     });
 });
