@@ -2,11 +2,12 @@ const excludedTags = ['amp-analytics', 'amp-experiment', 'amp-bind-state'];
 
 /**
  * Returns
- * @param {HTMLElement} root
+ * @param {String} selector
  * @param {String[]} attrs
  * @param {Function} callback
  */
-export function getHTML (root, attrs, callback) {
+export function getHTML (selector, attrs, callback) {
+    const root = document.querySelector(selector);
     let result = [];
 
     appendToResult(root, attrs, result);
@@ -35,7 +36,9 @@ function appendToResult (node, attrs, result) {
         if (typeof node === 'string') {
             result.push(node);
         } else if (node.nodeType === Node.TEXT_NODE) {
-            result.push(node.textContent);
+            if (node.textContent.replace(/\s/g, '') !== '') {
+                result.push(node.textContent);
+            }
         } else if (node && excludedTags.indexOf(node.tagName) === -1 && node.innerText) {
             appendOpenTag(node, attrs, result);
             stack.push(`</${node.tagName.toLowerCase()}>`);
