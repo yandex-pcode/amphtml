@@ -31,7 +31,6 @@ import {endsWith} from '../src/string';
 import {parseUrl, getSourceUrl, isProxyOrigin} from '../src/url';
 import {initLogConstructor, user} from '../src/log';
 import {getMode} from '../src/mode';
-import {getHTML} from '../src/get-html';
 
 // 3P - please keep in alphabetic order
 import {facebook} from './facebook';
@@ -421,6 +420,20 @@ function triggerResizeRequest(width, height) {
  */
 function triggerRenderStart(opt_data) {
   nonSensitiveDataPostMessage('render-start', opt_data);
+}
+
+/**
+ * @param {String} selector
+ * @param {String[]} attrs
+ * @param {Function} callback
+ */
+function getHTML(selector, attrs, callback) {
+  nonSensitiveDataPostMessage('get-html', {selector, attrs});
+
+  let unlisten = listenParent(window, 'get-html-result', data => {
+    callback(data.content);
+    unlisten();
+  });
 }
 
 /**

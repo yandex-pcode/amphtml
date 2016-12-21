@@ -21,9 +21,8 @@ const excludedTags = ['amp-analytics', 'amp-experiment', 'amp-bind-state'];
  * Returns content of HTML node
  * @param {String} selector
  * @param {String[]} attrs
- * @param {Function} callback
  */
-export function getHTML (selector, attrs, callback) {
+export function getHTML (selector, attrs) {
     const root = document.querySelector(selector);
     let result = [];
 
@@ -31,9 +30,7 @@ export function getHTML (selector, attrs, callback) {
         appendToResult(root, attrs, result);
     }
 
-    if (typeof callback === 'function') {
-        callback(result.join('').replace(/\s{2,}/g, ' '));
-    }
+    return result.join('').replace(/\s{2,}/g, ' ');
 }
 
 /**

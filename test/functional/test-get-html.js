@@ -42,26 +42,22 @@ describe('getHTML', () => {
     });
 
     it('should correctly works with empty second parameter', () => {
-        getHTML('#wrapper', [], function (result) {
-            expect(result).to.equal('<div><div>Lorem ipsum</div> dolor sit amet </div>');
-        });
+        let result = getHTML('#wrapper', [])
+        expect(result).to.equal('<div><div>Lorem ipsum</div> dolor sit amet </div>');
     });
 
     it('should correctly works with attributes array', () => {
-        getHTML('#wrapper', ['class', 'id'], function (result) {
-            expect(result).to.equal('<div id="wrapper"><div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
-        });
+        let result = getHTML('#wrapper', ['class', 'id']);
+        expect(result).to.equal('<div id="wrapper"><div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
     });
 
     it('should correctly works with attributes array', () => {
-        getHTML('.tmp', ['class', 'id'], function (result) {
-            expect(result).to.equal('<div class="tmp">Lorem ipsum</div>');
-        });
+        let result = getHTML('.tmp', ['class', 'id']);
+        expect(result).to.equal('<div class="tmp">Lorem ipsum</div>');
     });
 
     it('should correctly work with wrong selector', () => {
-        getHTML('.no-such-class', ['class', 'id'], function (result) {
-            expect(result).to.equal('');
-        });
+        let result = getHTML('.no-such-class', ['class', 'id']);
+        expect(result).to.equal('');
     });
 });
