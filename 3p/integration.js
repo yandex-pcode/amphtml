@@ -385,6 +385,7 @@ window.draw3p = function(opt_configCallback, opt_allowed3pTypes,
     window.context.reportRenderedEntityIdentifier =
         reportRenderedEntityIdentifier;
     window.context.computeInMasterFrame = computeInMasterFrame;
+    window.context.getHTML = getHTML;
     delete data._context;
     manageWin(window);
     installEmbedStateListener();
@@ -419,6 +420,20 @@ function triggerResizeRequest(width, height) {
  */
 function triggerRenderStart(opt_data) {
   nonSensitiveDataPostMessage('render-start', opt_data);
+}
+
+/**
+ * @param {String} selector
+ * @param {String[]} attrs
+ * @param {Function} callback
+ */
+function getHTML(selector, attrs, callback) {
+  nonSensitiveDataPostMessage('get-html', {selector, attrs});
+
+  let unlisten = listenParent(window, 'get-html-result', data => {
+    callback(data.content);
+    unlisten();
+  });
 }
 
 /**
