@@ -42,13 +42,13 @@ describe('getHTML', () => {
     });
 
     it('should correctly works with empty second parameter', () => {
-        let result = getHTML('#wrapper', [])
-        expect(result).to.equal('<div><div>Lorem ipsum</div> dolor sit amet </div>');
+        let result = getHTML('#wrapper', []);
+        expect(result).to.equal('<div> <div>Lorem ipsum</div> dolor sit amet </div>');
     });
 
     it('should correctly works with attributes array', () => {
         let result = getHTML('#wrapper', ['class', 'id']);
-        expect(result).to.equal('<div id="wrapper"><div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
+        expect(result).to.equal('<div id="wrapper"> <div class="tmp">Lorem ipsum</div> dolor sit amet </div>');
     });
 
     it('should correctly works with attributes array', () => {
