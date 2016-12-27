@@ -76,7 +76,7 @@ function appendToResult(node, attrs, result) {
 function isCorrectNode(node) {
   return node &&
       excludedTags.indexOf(node.tagName.toLowerCase()) === -1 &&
-      node.innerText;
+      node.textContent;
 }
 
 
