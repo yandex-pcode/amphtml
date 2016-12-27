@@ -53,9 +53,7 @@ function appendToResult (node, attrs, result) {
         if (typeof node === 'string') {
             result.push(node);
         } else if (node && node.nodeType === Node.TEXT_NODE) {
-            //if (node.textContent.replace(/\s/g, '') !== '') {
-                result.push(node.textContent);
-            //}
+            result.push(node.textContent);
         } else if (node && excludedTags.indexOf(node.tagName.toLowerCase()) === -1 && node.innerText) {
             appendOpenTag(node, attrs, result);
             stack.push(`</${node.tagName.toLowerCase()}>`);
