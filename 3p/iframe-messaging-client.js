@@ -13,21 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import './polyfills';
 import {listen} from '../src/event-helper';
-import {map} from '../src/types';
-import {user} from '../src/log';
-import {startsWith} from '../src/string';
+import {map} from '../src/utils/object';
+import {serializeMessage, deserializeMessage} from '../src/3p-frame';
+import {dev} from '../src/log';
 
 export class IframeMessagingClient {
 
   /**
-   *  @param {Window} win A window object.
+   *  @param {!Window} win A window object.
    */
   constructor(win) {
     /** @private {!Window} */
     this.win_ = win;
+    /** @private {?string} */
+    this.rtvVersion_ = (win.AMP_CONFIG && win.AMP_CONFIG.v) || null;
+    /** @private {!Window} */
     this.hostWindow_ = win.parent;
+    /** @private {?string} */
+    this.sentinel_ = null;
     /** Map messageType keys to callback functions for when we receive
      *  that message
      *  @private {!Object}
@@ -41,7 +45,7 @@ export class IframeMessagingClient {
    *
    * @param {string} requestType The type of the request message.
    * @param {string} responseType The type of the response message.
-   * @param {function(object)} callback The callback function to call
+   * @param {function(Object)} callback The callback function to call
    *   when a message with type responseType is received.
    */
   makeRequest(requestType, responseType, callback) {
@@ -56,7 +60,7 @@ export class IframeMessagingClient {
    *   All future calls will overwrite any previously registered
    *   callbacks.
    * @param {string} messageType The type of the message.
-   * @param {function()} callback The callback function to call
+   * @param {function(Object)} callback The callback function to call
    *   when a message with type messageType is received.
    */
   registerCallback(messageType, callback) {
@@ -73,9 +77,11 @@ export class IframeMessagingClient {
    *  @param {Object=} opt_payload The payload of message to send.
    */
   sendMessage(type, opt_payload) {
-    const message = {type, sentinel: this.sentinel_};
     this.hostWindow_.postMessage/*OK*/(
-        Object.assign(message, opt_payload), '*');
+        serializeMessage(
+            type, dev().assertString(this.sentinel_),
+            opt_payload, this.rtvVersion_),
+        '*');
   }
 
   /**
@@ -88,45 +94,34 @@ export class IframeMessagingClient {
    * @private
    */
   setupEventListener_() {
-    listen(this.win_, 'message', message => {
+    listen(this.win_, 'message', event => {
       // Does it look a message from AMP?
-      if (message.source != this.hostWindow_) {
-        return;
-      }
-      if (!message.data) {
-        return;
-      }
-      if (!startsWith(String(message.data), 'amp-')) {
+      if (event.source != this.hostWindow_) {
         return;
       }
 
-      // See if we can parse the payload.
-      try {
-        const payload = JSON.parse(message.data.substring(4));
-        // Check the sentinel as well.
-        if (payload.sentinel == this.sentinel_ &&
-            this.callbackFor_[payload.type]) {
-          try {
-            // We should probably report exceptions within callback
-            const callback = this.callbackFor_[payload.type];
-            callback(payload);
-          } catch (err) {
-            user().error(
-                'IFRAME-MSG',
-                `- Error in registered callback ${payload.type}`,
-                err);
-          }
-        }
-      } catch (e) {
-        // JSON parsing failed. Ignore the message.
+      const message = deserializeMessage(event.data);
+      if (!message || message.sentinel != this.sentinel_) {
+        return;
+      }
+
+      const callback = this.callbackFor_[message.type];
+      if (callback) {
+        callback(message);
       }
     });
   }
 
+  /**
+   * @param {!Window} win
+   */
   setHostWindow(win) {
     this.hostWindow_ = win;
   }
 
+  /**
+   * @param {string} sentinel
+   */
   setSentinel(sentinel) {
     this.sentinel_ = sentinel;
   }

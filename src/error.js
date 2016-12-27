@@ -51,15 +51,15 @@ self.AMPErrors = accumulatedErrorMessages;
  * @param {function()} work the function to execute after backoff
  * @return {number} the setTimeout id
  */
-let globalExponentialBackoff = function(work) {
-  // Set globalExponentialBackoff as the lazy-created function. JS Vooodoooo.
-  globalExponentialBackoff = exponentialBackoff(1.5);
-  return globalExponentialBackoff(work);
+let reportingBackoff = function(work) {
+  // Set reportingBackoff as the lazy-created function. JS Vooodoooo.
+  reportingBackoff = exponentialBackoff(1.5);
+  return reportingBackoff(work);
 };
 
 /**
  * Reports an error. If the error has an "associatedElement" property
- * the element is marked with the -amp-element-error and displays
+ * the element is marked with the `i-amphtml-element-error` and displays
  * the message itself. The message is always send to the console.
  * If the error has a "messageArray" property, that array is logged.
  * This way one gets the native fidelity of the console for things like
@@ -99,9 +99,9 @@ export function reportError(error, opt_associatedElement) {
   // Update element.
   const element = opt_associatedElement || error.associatedElement;
   if (element && element.classList) {
-    element.classList.add('-amp-error');
+    element.classList.add('i-amphtml-error');
     if (getMode().development) {
-      element.classList.add('-amp-element-error');
+      element.classList.add('i-amphtml-element-error');
       element.setAttribute('error-message', error.message);
     }
   }
@@ -114,7 +114,9 @@ export function reportError(error, opt_associatedElement) {
     } else {
       if (element) {
         (console.error || console.log).call(console,
-            element.tagName + '#' + element.id, error.message);
+            element.tagName.toLowerCase() +
+                (element.id ? ' with id ' + element.id : '') + ':',
+            error.message);
       } else if (!getMode().minified) {
         (console.error || console.log).call(console, error.stack);
       } else {
@@ -187,11 +189,11 @@ function reportErrorToServer(message, filename, line, col, error) {
   }
   const url = getErrorReportUrl(message, filename, line, col, error,
       hasNonAmpJs);
-  globalExponentialBackoff(() => {
-    if (url) {
+  if (url) {
+    reportingBackoff(() => {
       new Image().src = url;
-    }
-  });
+    });
+  }
 }
 
 /**
