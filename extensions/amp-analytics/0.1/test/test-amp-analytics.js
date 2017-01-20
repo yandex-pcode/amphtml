@@ -17,10 +17,8 @@
 import {ANALYTICS_CONFIG} from '../vendors';
 import {AmpAnalytics} from '../amp-analytics';
 import {Crypto} from '../crypto-impl';
-import {
-  InstrumentationService,
-  instrumentationServiceForDoc,
-} from '../instrumentation';
+import {InstrumentationService} from '../instrumentation';
+import {variableServiceFor} from '../variables';
 import {
   installUserNotificationManager,
 } from '../../../amp-user-notification/0.1/amp-user-notification';
@@ -32,6 +30,7 @@ import {
   fromClassForDoc,
 } from '../../../../src/service';
 import {markElementScheduledForTesting} from '../../../../src/custom-element';
+import {map} from '../../../../src/utils/object';
 import {installCidService,} from
     '../../../../extensions/amp-analytics/0.1/cid-impl';
 import {urlReplacementsForDoc} from '../../../../src/url-replacements';
@@ -54,6 +53,7 @@ describe('amp-analytics', function() {
   let uidService;
   let crypto;
   let ampdoc;
+  let ins;
 
   const jsonMockResponses = {
     'config1': '{"vars": {"title": "remote"}}',
@@ -78,7 +78,7 @@ describe('amp-analytics', function() {
       resetServiceForTesting(iframe.win, 'xhr');
       getService(iframe.win, 'xhr', () => {
         return {fetchJson: (url, init) => {
-          expect(init.requireAmpResponseSourceOrigin).to.be.true;
+          expect(init.requireAmpResponseSourceOrigin).to.be.undefined;
           if (configWithCredentials) {
             expect(init.credentials).to.equal('include');
           } else {
@@ -99,7 +99,7 @@ describe('amp-analytics', function() {
       windowApi = iframe.win;
       ampdoc = new AmpDocSingle(windowApi);
 
-      fromClassForDoc(
+      ins = fromClassForDoc(
           ampdoc, 'amp-analytics-instrumentation', InstrumentationService);
     });
   });
@@ -201,8 +201,9 @@ describe('amp-analytics', function() {
                 expect(this.replacements_).to.have.property(name);
                 return {sync: '_' + name.toLowerCase() + '_'};
               });
-            const encodeVars = analytics.encodeVars_;
-            sandbox.stub(analytics, 'encodeVars_', function(val, name) {
+            const variables = variableServiceFor(analytics.win);
+            const encodeVars = variables.encodeVars;
+            sandbox.stub(variables, 'encodeVars', function(val, name) {
               val = encodeVars.call(this, val, name);
               if (val == '') {
                 return '$' + name;
@@ -386,6 +387,8 @@ describe('amp-analytics', function() {
 
     return analytics.layoutCallback().then(() => {
       expect(analytics.mergeObjects_({}, {})).to.deep.equal({});
+      expect(analytics.mergeObjects_(map({'a': 0}), map({'b': 1})))
+          .to.deep.equal(map({'a': 0, 'b': 1}));
       expect(analytics.mergeObjects_({'foo': 1}, {'1': 1}))
           .to.deep.equal({'foo': 1, '1': 1});
       expect(analytics.mergeObjects_({'1': 1}, {'bar': 'bar'}))
@@ -497,7 +500,6 @@ describe('amp-analytics', function() {
   it('expands element level vars with higher precedence than trigger vars',
     () => {
       const analytics = getAnalyticsTag();
-      const ins = instrumentationServiceForDoc(ampdoc);
       sandbox.stub(ins, 'isTriggerAllowed_').returns(true);
       const el1 = windowApi.document.createElement('div');
       el1.className = 'x';
@@ -570,15 +572,6 @@ describe('amp-analytics', function() {
     });
   });
 
-  it('correctly encodes scalars and arrays', () => {
-    const a = getAnalyticsTag();
-    expect(a.encodeVars_('abc %&')).to.equal('abc%20%25%26');
-    const array = ['abc %&', 'a b'];
-    expect(a.encodeVars_(array)).to.equal('abc%20%25%26,a%20b');
-    // Test non-inplace semantics but testing again.
-    expect(a.encodeVars_(array)).to.equal('abc%20%25%26,a%20b');
-  });
-
   it('expands url-replacements vars', () => {
     const analytics = getAnalyticsTag({
       'requests': {
@@ -627,7 +620,6 @@ describe('amp-analytics', function() {
   });
 
   it('expands selector with config variable', () => {
-    const ins = instrumentationServiceForDoc(ampdoc);
     const addListenerSpy = sandbox.spy(ins, 'addListener');
     const analytics = getAnalyticsTag({
       requests: {foo: 'https://example.com/bar'},
@@ -642,7 +634,6 @@ describe('amp-analytics', function() {
 
   function selectorExpansionTest(selector) {
     it('expand selector value: ' + selector, () => {
-      const ins = instrumentationServiceForDoc(ampdoc);
       const addListenerSpy = sandbox.spy(ins, 'addListener');
       const analytics = getAnalyticsTag({
         requests: {foo: 'https://example.com/bar'},
@@ -664,7 +655,6 @@ describe('amp-analytics', function() {
         .map(selectorExpansionTest);
 
   it('does not expands selector with platform variable', () => {
-    const ins = instrumentationServiceForDoc(ampdoc);
     const addListenerSpy = sandbox.spy(ins, 'addListener');
     const analytics = getAnalyticsTag({
       requests: {foo: 'https://example.com/bar'},
@@ -936,41 +926,6 @@ describe('amp-analytics', function() {
       return waitForSendRequest(analytics).then(() => {
         expect(sendRequestSpy.callCount).to.equal(1);
       });
-    });
-  });
-
-  describe('expandTemplate_', () => {
-    const vars = {
-      'vars': {'1': '1${2}', '2': '2${3}', '3': '3${4}', '4': '4${1}'}};
-    let analytics;
-
-    beforeEach(() => {
-      analytics = getAnalyticsTag(trivialConfig);
-    });
-
-    it('expands nested vars', () => {
-      const actual = analytics.expandTemplate_('${1}', vars);
-      expect(actual).to.equal('123%252524%25257B4%25257D');
-    });
-
-    it('limits the recursion to n', () => {
-      let actual = analytics.expandTemplate_('${1}', vars, {}, 3);
-      expect(actual).to.equal('1234%25252524%2525257B1%2525257D');
-
-      actual = analytics.expandTemplate_('${1}', vars, {}, 5);
-      expect(actual).to.equal('123412%252525252524%25252525257B3%25252525257D');
-    });
-
-    it('works with complex params (1)', () => {
-      const vars = {'vars': {'fooParam': 'QUERY_PARAM(foo,bar)'}};
-      const actual = analytics.expandTemplate_('${fooParam}', vars);
-      expect(actual).to.equal('QUERY_PARAM(foo,bar)');
-    });
-
-    it('works with complex params (2)', () => {
-      const vars = {'vars': {'fooParam': 'QUERY_PARAM'}};
-      const actual = analytics.expandTemplate_('${fooParam(foo,bar)}', vars);
-      expect(actual).to.equal('QUERY_PARAM(foo,bar)');
     });
   });
 

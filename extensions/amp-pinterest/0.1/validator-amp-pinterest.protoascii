@@ -21,6 +21,7 @@ tags: {  # amp-pinterest
   spec_name: "amp-pinterest extension .js script"
   mandatory_parent: "HEAD"
   unique_warning: true
+  extension_unused_unless_tag_present: "amp-pinterest"
   attrs: {
     name: "async"
     mandatory: true

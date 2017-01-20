@@ -21,6 +21,7 @@ tags: {  # amp-o2-player
   spec_name: "amp-o2-player extension .js script"
   mandatory_parent: "HEAD"
   unique_warning: true
+  extension_unused_unless_tag_present: "amp-o2-player"
   attrs: {
     name: "async"
     mandatory: true

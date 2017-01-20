@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
+import {ampdocServiceFor} from '../../../src/ampdoc';
 import {getDataParamsFromAttributes} from '../../../src/dom';
 import {tryParseJson} from '../../../src/json';
 import {isLayoutSizeDefined} from '../../../src/layout';
 import {dev, user} from '../../../src/log';
+import {
+  installVideoManagerForDoc,
+} from '../../../src/service/video-manager-impl';
 import {setStyles} from '../../../src/style';
 import {addParamsToUrl} from '../../../src/url';
-import {timerFor} from '../../../src/timer';
 import {isObject} from '../../../src/types';
 import {VideoEvents} from '../../../src/video-interface';
 import {videoManagerForDoc} from '../../../src/video-manager';
@@ -75,7 +78,11 @@ class AmpYoutube extends AMP.BaseElement {
    * @override
    */
   preconnectCallback(opt_onLayout) {
-    this.preconnect.preload(this.getVideoIframeSrc_());
+    // NOTE: When preload `as=document` is natively supported in browsers
+    // we can switch to preloading the full source. For now this doesn't
+    // work, because we preload with a different type and in that case
+    // responses are only picked up if they are cacheable.
+    this.preconnect.url(this.getVideoIframeSrc_());
     // Host that YT uses to serve JS needed by player.
     this.preconnect.url('https://s.ytimg.com', opt_onLayout);
     // Load high resolution placeholder images for videos in prerender mode.
@@ -115,6 +122,9 @@ class AmpYoutube extends AMP.BaseElement {
     if (!this.getPlaceholder()) {
       this.buildImagePlaceholder_();
     }
+
+    const ampdoc = ampdocServiceFor(this.win).getAmpDoc();
+    installVideoManagerForDoc(ampdoc);
   }
 
   /** @return {string} */
@@ -184,13 +194,6 @@ class AmpYoutube extends AMP.BaseElement {
     videoManagerForDoc(this.win.document).register(this);
 
     return this.loadPromise(iframe)
-        .then(() => {
-          // Make sure the YT player is ready for this. For some reason YT player
-          // would send couple of messages but then stop. Waiting for a bit before
-          // sending the 'listening' event seems to fix that and allow YT
-          // Player to send messages continuously.
-          return timerFor(this.win).promise(300);
-        })
         .then(() => this.listenToFrame_())
         .then(() => this.playerReadyPromise_);
   }

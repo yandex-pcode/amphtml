@@ -80,7 +80,10 @@ function isValidatorWebuiFile(filePath) {
  * @return {boolean}
  */
 function isBuildSystemFile(filePath) {
-  return filePath.startsWith('build-system');
+  return filePath.startsWith('build-system') &&
+      // Exclude textproto from build-system since we want it to trigger
+      // tests and type check.
+      path.extname(filePath) != '.textproto';
 }
 
 /**
@@ -143,8 +146,9 @@ const command = {
     execOrDie('npm run ava');
   },
   buildRuntime: function() {
+    execOrDie(`${gulp} clean`);
     execOrDie(`${gulp} lint`);
-    execOrDie(`${gulp} build --css-only`);
+    execOrDie(`${gulp} build`);
     execOrDie(`${gulp} check-types`);
     execOrDie(`${gulp} dist --fortesting`);
   },

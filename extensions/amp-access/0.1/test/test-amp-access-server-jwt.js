@@ -222,6 +222,7 @@ describe('AccessServerJwtAdapter', () => {
               headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
+              requireAmpResponseSourceOrigin: false,
             })
             .returns(Promise.resolve(responseDoc))
             .once();
@@ -254,6 +255,7 @@ describe('AccessServerJwtAdapter', () => {
               headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
+              requireAmpResponseSourceOrigin: false,
             })
             .returns(Promise.reject('intentional'))
             .once();
@@ -288,6 +290,7 @@ describe('AccessServerJwtAdapter', () => {
               headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
+              requireAmpResponseSourceOrigin: false,
             })
             .returns(new Promise(() => {}))  // Never resolved.
             .once();
@@ -356,7 +359,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(Promise.resolve(encoded))
             .once();
@@ -381,7 +383,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(Promise.reject('intentional'))
             .once();
@@ -404,7 +405,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(new Promise(() => {}))  // Never resolved.
             .once();
@@ -435,7 +435,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(Promise.resolve(encoded))
             .once();
@@ -478,7 +477,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(Promise.resolve(encoded))
             .once();
@@ -525,7 +523,6 @@ describe('AccessServerJwtAdapter', () => {
         xhrMock.expects('fetchText')
             .withExactArgs('https://acme.com/a?rid=r1', {
               credentials: 'include',
-              requireAmpResponseSourceOrigin: true,
             })
             .returns(Promise.resolve(encoded))
             .once();

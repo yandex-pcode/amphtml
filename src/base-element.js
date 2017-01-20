@@ -32,7 +32,7 @@ import {user} from './log';
  * The base class implements a set of lifecycle methods that are called by
  * the runtime as appropriate. These are mostly based on the custom element
  * lifecycle (See
- * http://www.html5rocks.com/en/tutorials/webcomponents/customelements/)
+ * https://developers.google.com/web/fundamentals/getting-started/primers/customelements)
  * and adding AMP style late loading to the mix.
  *
  * The complete lifecycle of custom DOM element is:
@@ -160,6 +160,21 @@ export class BaseElement {
   */
   getPriority() {
     return 0;
+  }
+
+  /**
+   * Updates the priority of the resource. If there are tasks currently
+   * scheduled, their priority is updated as well.
+   *
+   * This method can be called any time when the new priority value is
+   * available. It's a restricted API and special review is required to
+   * allow individual extensions to request priority upgrade.
+   *
+   * @param {number} newPriority
+   * @restricted
+   */
+  updatePriority(newPriority) {
+    this.element.getResources().updatePriority(this.element, newPriority);
   }
 
   /** @return {!Layout} */
@@ -511,18 +526,22 @@ export class BaseElement {
   /**
    * Utility method that propagates attributes from this element
    * to the given element.
-   * @param  {string|!Array<string>} attributes
-   * @param  {!Element} element
+   * If `opt_removeMissingAttrs` is true, then also removes any specified
+   * attributes that are missing on this element from the target element.
+   * @param {string|!Array<string>} attributes
+   * @param {!Element} element
+   * @param {boolean=} opt_removeMissingAttrs
    * @public @final
    */
-  propagateAttributes(attributes, element) {
+  propagateAttributes(attributes, element, opt_removeMissingAttrs) {
     attributes = isArray(attributes) ? attributes : [attributes];
     for (let i = 0; i < attributes.length; i++) {
       const attr = attributes[i];
-      if (!this.element.hasAttribute(attr)) {
-        continue;
+      if (this.element.hasAttribute(attr)) {
+        element.setAttribute(attr, this.element.getAttribute(attr));
+      } else if (opt_removeMissingAttrs) {
+        element.removeAttribute(attr);
       }
-      element.setAttribute(attr, this.element.getAttribute(attr));
     }
   }
 
@@ -622,8 +641,14 @@ export class BaseElement {
    * @public @final
    */
   applyFillContent(element, opt_replacedContent) {
+    // TODO(dvoytenko, #6794): Remove old `-amp-fill-content` form after the new
+    // form is in PROD for 1-2 weeks.
+    element.classList.add('i-amphtml-fill-content');
     element.classList.add('-amp-fill-content');
     if (opt_replacedContent) {
+      // TODO(dvoytenko, #6794): Remove old `-amp-replaced-content` form after the new
+      // form is in PROD for 1-2 weeks.
+      element.classList.add('i-amphtml-replaced-content');
       element.classList.add('-amp-replaced-content');
     }
   }
@@ -798,6 +823,19 @@ export class BaseElement {
    * @param {!AmpElement} unusedElement
    */
   collapsedCallback(unusedElement) {
+    // Subclasses may override.
+  }
+
+  /**
+   * Called when one or more attributes are mutated.
+   * @note Must be called inside a mutate context.
+   * @note Boolean attributes have a value of `true` and `false` when
+   *       present and missing, respectively.
+   * @param {
+   *   !Object<string, (null|boolean|string|number|Array|Object)>
+   * } unusedMutations
+   */
+  mutatedAttributesCallback(unusedMutations) {
     // Subclasses may override.
   }
 

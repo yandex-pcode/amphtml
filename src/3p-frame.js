@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-
 import {dev, user} from './log';
 import {documentInfoForDoc} from './document-info';
+import {isExperimentOn, experimentToggles, isCanary} from './experiments';
 import {getLengthNumeral} from '../src/layout';
 import {tryParseJson} from './json';
 import {getMode} from './mode';
@@ -28,6 +28,11 @@ import {urls} from './config';
 import {setStyle} from './style';
 import {domFingerprint} from './utils/dom-fingerprint';
 
+/**
+ * If true, then in experiment where the passing of context metadata
+ * has been moved from the iframe src hash to the iframe name attribute.
+ */
+const iframeContextInName = isExperimentOn(self, '3p-frame-context-in-name');
 
 /** @type {!Object<string,number>} Number of 3p frames on the for that type. */
 let count = {};
@@ -78,12 +83,13 @@ function getFrameAttributes(parentWindow, element, opt_type, opt_context) {
     },
     tagName: element.tagName,
     mode: getModeObject(),
-    canary: !!(parentWindow.AMP_CONFIG && parentWindow.AMP_CONFIG.canary),
+    canary: isCanary(parentWindow),
     hidden: !viewer.isVisible(),
     amp3pSentinel: generateSentinel(parentWindow),
     initialIntersection: element.getIntersectionChangeEntry(),
     domFingerprint: domFingerprint(element),
     startTime,
+    experimentToggles: experimentToggles(parentWindow),
   };
   Object.assign(attributes._context, opt_context);
   const adSrc = element.getAttribute('src');
@@ -115,16 +121,33 @@ export function getIframe(parentWindow, parentElement, opt_type, opt_context) {
   if (!count[attributes.type]) {
     count[attributes.type] = 0;
   }
+  count[attributes.type] += 1;
 
   const baseUrl = getBootstrapBaseUrl(parentWindow);
   const host = parseUrl(baseUrl).hostname;
-  // Pass ad attributes to iframe via the fragment.
-  const src = baseUrl + '#' + JSON.stringify(attributes);
-  const name = host + '_' + attributes.type + '_' + count[attributes.type]++;
+  let name;
+  if (iframeContextInName) {
+    // This name attribute may be overwritten if this frame is chosen to
+    // be the master frame. That is ok, as we will read the name off
+    // for our uses before that would occur.
+    // @see https://github.com/ampproject/amphtml/blob/master/3p/integration.js
+    name = JSON.stringify({
+      host,
+      type: attributes.type,
+      // https://github.com/ampproject/amphtml/pull/2955
+      count: count[attributes.type],
+      attributes,
+    });
 
-  iframe.src = src;
+    iframe.src = baseUrl;
+    iframe.ampLocation = parseUrl(baseUrl);
+  } else {
+    const src = baseUrl + '#' + JSON.stringify(attributes);
+    name = host + '_' + attributes.type + '_' + count[attributes.type];
+    iframe.src = src;
+    iframe.ampLocation = parseUrl(src);
+  }
   iframe.name = name;
-  iframe.ampLocation = parseUrl(src);
   iframe.width = attributes.width;
   iframe.height = attributes.height;
   iframe.setAttribute('scrolling', 'no');
@@ -216,21 +239,24 @@ export function resetBootstrapBaseUrlForTesting(win) {
 /**
  * Returns the default base URL for 3p bootstrap iframes.
  * @param {!Window} parentWindow
+ * @param {string=} opt_srcFileBasename
  * @return {string}
  */
-function getDefaultBootstrapBaseUrl(parentWindow) {
+export function getDefaultBootstrapBaseUrl(parentWindow, opt_srcFileBasename) {
+  const srcFileBasename = opt_srcFileBasename || 'frame';
   if (getMode().localDev || getMode().test) {
     if (overrideBootstrapBaseUrl) {
       return overrideBootstrapBaseUrl;
     }
     return getAdsLocalhost(parentWindow)
         + '/dist.3p/'
-        + (getMode().minified ? '$internalRuntimeVersion$/frame'
-            : 'current/frame.max')
+        + (getMode().minified ? `$internalRuntimeVersion$/${srcFileBasename}`
+            : `current/${srcFileBasename}.max`)
         + '.html';
   }
   return 'https://' + getSubDomain(parentWindow) +
-      `.${urls.thirdPartyFrameHost}/$internalRuntimeVersion$/frame.html`;
+      `.${urls.thirdPartyFrameHost}/$internalRuntimeVersion$/` +
+      `${srcFileBasename}.html`;
 }
 
 function getAdsLocalhost(win) {
@@ -257,7 +283,7 @@ export function getSubDomain(win) {
  * @param {!Window} win
  * @return {string}
  */
-function getRandom(win) {
+export function getRandom(win) {
   let rand;
   if (win.crypto && win.crypto.getRandomValues) {
     // By default use 2 32 bit integers.
@@ -323,4 +349,67 @@ export function generateSentinel(parentWindow) {
  */
 export function resetCountForTesting() {
   count = {};
+}
+
+
+/** @const */
+const AMP_MESSAGE_PREFIX = 'amp-';
+
+/** @enum {string} */
+export const MessageType = {
+  // For amp-ad
+  SEND_EMBED_STATE: 'send-embed-state',
+  EMBED_STATE: 'embed-state',
+  SEND_EMBED_CONTEXT: 'send-embed-context',
+  EMBED_CONTEXT: 'embed-context',
+  SEND_INTERSECTIONS: 'send-intersections',
+  INTERSECTION: 'intersection',
+  EMBED_SIZE: 'embed-size',
+  EMBED_SIZE_CHANGED: 'embed-size-changed',
+  EMBED_SIZE_DENIED: 'embed-size-denied',
+
+  // For amp-inabox
+  SEND_POSITIONS: 'send-positions',
+  POSITION: 'position',
+};
+
+/**
+ * Serialize an AMP post message. Output looks like:
+ * 'amp-011481323099490{"type":"position","sentinel":"12345","foo":"bar"}'
+ * @param {string} type
+ * @param {string} sentinel
+ * @param {Object=} data
+ * @param {?string=} rtvVersion
+ * @returns {string}
+ */
+export function serializeMessage(type, sentinel, data = {}, rtvVersion = null) {
+  // TODO: consider wrap the data in a "data" field. { type, sentinal, data }
+  const message = data;
+  message.type = type;
+  message.sentinel = sentinel;
+  return AMP_MESSAGE_PREFIX + (rtvVersion || '') + JSON.stringify(message);
+}
+
+/**
+ * Deserialize an AMP post message.
+ * Returns null if it's not valid AMP message format.
+ *
+ * @param message {*}
+ * @returns {?JSONType}
+ */
+export function deserializeMessage(message) {
+  if (typeof message !== 'string' || message.indexOf(AMP_MESSAGE_PREFIX) != 0) {
+    return null;
+  }
+  const startPos = message.indexOf('{');
+  if (startPos == -1) {
+    dev().error('MESSAGING', 'Failed to parse message: ' + message);
+    return null;
+  }
+  try {
+    return /** @type {!JSONType} */ (JSON.parse(message.substr(startPos)));
+  } catch (e) {
+    dev().error('MESSAGING', 'Failed to parse message: ' + message, e);
+    return null;
+  }
 }

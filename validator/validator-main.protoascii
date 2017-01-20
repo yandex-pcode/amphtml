@@ -20,12 +20,12 @@
 # in production from crashing. This id is not relevant to validator.js
 # because thus far, engine (validator.js) and spec file
 # (validator-main.protoascii) are always released together.
-min_validator_revision_required: 189
+min_validator_revision_required: 210
 # The spec file revision allows the validator engine to distinguish
 # newer versions of the spec file. This is currently a Google internal
 # mechanism, validator.js does not use this facility. However, any
 # change to this file (validator-main.js) requires updating this revision id.
-spec_file_revision: 315
+spec_file_revision: 349
 
 # Validator extensions.
 # =====================
@@ -72,7 +72,7 @@ tags: {  # AMP
   }
   spec_url: "https://www.ampproject.org/docs/reference/spec.html#required-markup"
 }
-tags: {  # A4A
+tags: {  # AMP4ADS
   html_format: AMP4ADS
   tag_name: "HTML"
   spec_name: "html ⚡4ads for top-level html"
@@ -229,7 +229,8 @@ tags: {
                  "https://fonts\\.googleapis\\.com/icon\\?.*|"
                  "https://fonts\\.googleapis\\.com/earlyaccess/.*\\.css|"
                  "https://fast\\.fonts\\.net/.*|"
-                 "https://maxcdn\\.bootstrapcdn\\.com/font-awesome/.*|"
+                 "https://maxcdn\\.bootstrapcdn\\.com/font-awesome/"
+                 "([0-9]+\\.?)+/css/font-awesome\\.min\\.css(\\?.*)?|"
                  "https://cloud\\.typography\\.com/[0-9]*/[0-9]*/css/fonts\\.css"
   }
   attrs: {
@@ -272,6 +273,21 @@ tags: {
   }
   attrs: {
     name: "itemprop"
+    mandatory: true
+  }
+  attr_lists: "common-link-attrs"
+  spec_url: "https://www.ampproject.org/docs/reference/spec.html#html-tags"
+}
+# rel= isn't mandatory when property= is present.
+tags: {
+  tag_name: "LINK"
+  spec_name: "link property="
+  attrs: {
+    name: "href"
+    mandatory: true
+  }
+  attrs: {
+    name: "property"
     mandatory: true
   }
   attr_lists: "common-link-attrs"
@@ -578,8 +594,8 @@ tags: {  # Special custom 'author' spreadsheet for AMP
     # These regex blacklists are temporary hacks to validate essential CSS
     # rules. They will be replaced later with more principled solutions.
     blacklisted_cdata_regex: {
-      regex: "\\.i?-amp-"
-      error_message: "CSS -amp- class name prefix"
+      regex: "(^|\\W)i-amphtml-"
+      error_message: "CSS i-amphtml- name prefix"
     }
     blacklisted_cdata_regex: {
       regex: "!important"
@@ -588,7 +604,7 @@ tags: {  # Special custom 'author' spreadsheet for AMP
   }
   spec_url: "https://www.ampproject.org/docs/reference/spec.html#stylesheets"
 }
-tags: {  # Special custom 'author' spreadsheet for A4A
+tags: {  # Special custom 'author' spreadsheet for AMP4ADS
   html_format: AMP4ADS
   tag_name: "STYLE"
   spec_name: "style amp-custom (AMP4ADS)"
@@ -668,8 +684,8 @@ tags: {  # Special custom 'author' spreadsheet for A4A
     # These regex blacklists are temporary hacks to validate essential CSS
     # rules. They will be replaced later with more principled solutions.
     blacklisted_cdata_regex: {
-      regex: "\\.i?-amp-"
-      error_message: "CSS -amp- class name prefix"
+      regex: "(^|\\W)i-amphtml-"
+      error_message: "CSS i-amphtml- name prefix"
     }
     blacklisted_cdata_regex: {
       regex: "!important"
@@ -853,6 +869,7 @@ attr_lists: {
     # It may be safe to allow all URLs here, but just in case javascript: or
     # similar URLs are an issue, we add the same constraints as an anchor.
     value_url: {
+      allow_empty: true
       allow_relative: true
       allowed_protocol: "http"
       allowed_protocol: "https"
@@ -945,14 +962,22 @@ tags: {
   attrs: {
     name: "href"
     value_url: {
+      # Maintain the same whitelist of protocols here as for the <CITE> tag.
+      allow_empty: true
+      allow_relative: true
       allowed_protocol: "ftp"
       allowed_protocol: "http"
       allowed_protocol: "https"
       allowed_protocol: "mailto"
       # Whitelisting additional commonly observed third party
       # protocols which should be safe
+      # Blackberry messenger
+      # (http://devblog.blackberry.com/2015/02/cross-platform-sharing-with-bbm/)
+      allowed_protocol: "bbmi"
       allowed_protocol: "fb-messenger"
       allowed_protocol: "intent"
+      # Line messenger (https://media.line.me/howto/en/)
+      allowed_protocol: "line"
       allowed_protocol: "skype"
       allowed_protocol: "sms"
       allowed_protocol: "snapchat"
@@ -962,7 +987,6 @@ tags: {
       allowed_protocol: "twitter"
       allowed_protocol: "viber"
       allowed_protocol: "whatsapp"
-      allow_relative: true
     }
     blacklisted_value_regex: "__amp_source_origin"
   }
@@ -1168,7 +1192,7 @@ tags: {
 # the exception of tags inside of a <noscript> ancestor.
 # 4.7.1 The img element
 tags: {
-  html_format: AMP  # Disallowed in A4A because <noscript> is disallowed.
+  html_format: AMP  # Disallowed in AMP4ADS because <noscript> is disallowed.
   tag_name: "IMG"
   mandatory_ancestor: "NOSCRIPT"
   mandatory_ancestor_suggested_alternative: "AMP-IMG"
@@ -1205,7 +1229,7 @@ tags: {
 # 4.7.6 The video element
 # Only allowed in noscript tags. Otherwise use amp-video.
 tags: {
-  html_format: AMP  # Disallowed in A4A because <noscript> is disallowed.
+  html_format: AMP  # Disallowed in AMP4ADS because <noscript> is disallowed.
   tag_name: "VIDEO"
   mandatory_ancestor: "NOSCRIPT"
   mandatory_ancestor_suggested_alternative: "AMP-VIDEO"
@@ -1218,6 +1242,7 @@ tags: {
     deprecation: "autoplay"
     deprecation_url: "https://www.ampproject.org/docs/reference/amp-video.html"
   }
+  attrs: { name: "playsinline" }
   attrs: { name: "poster" }
   attrs: { name: "preload" }
   attrs: {
@@ -1235,7 +1260,7 @@ tags: {
 # 4.7.7 The audio element
 # Only allowed in noscript tags. Otherwise use amp-audio.
 tags: {
-  html_format: AMP  # Disallowed in A4A because <noscript> is disallowed.
+  html_format: AMP  # Disallowed in AMP4ADS because <noscript> is disallowed.
   tag_name: "AUDIO"
   mandatory_ancestor: "NOSCRIPT"
   mandatory_ancestor_suggested_alternative: "AMP-AUDIO"
@@ -1693,6 +1718,22 @@ tags: {
   spec_url: "https://www.ampproject.org/docs/reference/spec.html#svg"
 }
 tags: {
+  tag_name: "ELLIPSE"
+  mandatory_ancestor: "SVG"
+  attrs: { name: "class" }
+  attrs: { name: "cx" }
+  attrs: { name: "cy" }
+  attrs: { name: "externalresourcesrequired" }
+  attrs: { name: "rx" }
+  attrs: { name: "ry" }
+  attrs: { name: "sketch:type" }
+  attrs: { name: "transform" }
+  attr_lists: "svg-conditional-processing-attributes"
+  attr_lists: "svg-core-attributes"
+  attr_lists: "svg-presentation-attributes"
+  spec_url: "https://www.ampproject.org/docs/reference/spec.html#svg"
+}
+tags: {
   tag_name: "LINE"
   mandatory_ancestor: "SVG"
   attrs: { name: "class" }
@@ -2132,6 +2173,7 @@ tags {  # <form method=GET ...>
       allow_relative: true
       allowed_protocol: "https"
       disallowed_domain: "cdn.ampproject.org"
+      disallowed_domain: "amp.cloudflare.com"
     }
     blacklisted_value_regex: "__amp_source_origin"
   }
@@ -2141,6 +2183,7 @@ tags {  # <form method=GET ...>
       allow_relative: true
       allowed_protocol: "https"
       disallowed_domain: "cdn.ampproject.org"
+      disallowed_domain: "amp.cloudflare.com"
     }
     blacklisted_value_regex: "__amp_source_origin"
   }
@@ -2180,6 +2223,7 @@ tags {  # <form method=POST ...>
       allow_relative: true
       allowed_protocol: "https"
       disallowed_domain: "cdn.ampproject.org"
+      disallowed_domain: "amp.cloudflare.com"
     }
     blacklisted_value_regex: "__amp_source_origin"
   }
@@ -2226,6 +2270,127 @@ tags {
     first_child_tag_name_oneof: "TEMPLATE"
   }
 }
+attr_lists: {
+  name: "input-name-attr"
+  attrs: {
+    name: "name"
+    blacklisted_value_regex: "(^|\\s)("  # Values are space separated
+        "__amp_source_origin|"
+        "__count__|"
+        "__defineGetter__|"
+        "__defineSetter__|"
+        "__lookupGetter__|"
+        "__lookupSetter__|"
+        "__noSuchMethod__|"
+        "__parent__|"
+        "__proto__|"
+        "\\$p|"
+        "\\$proxy|"
+        "acceptCharset|"
+        "addEventListener|"
+        "appendChild|"
+        "assignedSlot|"
+        "attachShadow|"
+        "baseURI|"
+        "checkValidity|"
+        "childElementCount|"
+        "childNodes|"
+        "classList|"
+        "className|"
+        "clientHeight|"
+        "clientLeft|"
+        "clientTop|"
+        "clientWidth|"
+        "compareDocumentPosition|"
+        "computedName|"
+        "computedRole|"
+        "contentEditable|"
+        "createShadowRoot|"
+        "firstChild|"
+        "firstElementChild|"
+        "getAnimations|"
+        "getAttribute|"
+        "getAttributeNS|"
+        "getAttributeNode|"
+        "getAttributeNodeNS|"
+        "getBoundingClientRect|"
+        "getClientRects|"
+        "getDestinationInsertionPoints|"
+        "getElementsByClassName|"
+        "getElementsByTagName|"
+        "getElementsByTagNameNS|"
+        "getRootNode|"
+        "hasAttribute|"
+        "hasAttributeNS|"
+        "hasAttributes|"
+        "hasChildNodes|"
+        "hasPointerCapture|"
+        "innerHTML|"
+        "innerText|"
+        "inputMode|"
+        "insertAdjacentElement|"
+        "insertAdjacentHTML|"
+        "insertAdjacentText|"
+        "isContentEditable|"
+        "isDefaultNamespace|"
+        "isEqualNode|"
+        "isSameNode|"
+        "lastChild|"
+        "lastElementChild|"
+        "lookupNamespaceURI|"
+        "namespaceURI|"
+        "nextElementSibling|"
+        "nextSibling|"
+        "nodeName|"
+        "nodeType|"
+        "nodeValue|"
+        "offsetHeight|"
+        "offsetLeft|"
+        "offsetParent|"
+        "offsetTop|"
+        "offsetWidth|"
+        "outerHTML|"
+        "outerText|"
+        "ownerDocument|"
+        "parentElement|"
+        "parentNode|"
+        "previousElementSibling|"
+        "previousSibling|"
+        "querySelector|"
+        "querySelectorAll|"
+        "releasePointerCapture|"
+        "removeAttribute|"
+        "removeAttributeNS|"
+        "removeAttributeNode|"
+        "removeChild|"
+        "removeEventListener|"
+        "replaceChild|"
+        "reportValidity|"
+        "requestPointerLock|"
+        "scrollHeight|"
+        "scrollIntoView|"
+        "scrollIntoViewIfNeeded|"
+        "scrollLeft|"
+        "scrollWidth|"
+        "setAttribute|"
+        "setAttributeNS|"
+        "setAttributeNode|"
+        "setAttributeNodeNS|"
+        "setPointerCapture|"
+        "shadowRoot|"
+        "styleMap|"
+        "tabIndex|"
+        "tagName|"
+        "textContent|"
+        "toString|"
+        "valueOf|"
+        "(webkit|ms|moz|o)dropzone|"
+        "(webkit|moz|ms|o)MatchesSelector|"
+        "(webkit|moz|ms|o)RequestFullScreen|"
+        "(webkit|moz|ms|o)RequestFullscreen"
+        ")(\\s|$)"
+  }
+}
 # 4.10.4 The label element
 tags: {
   tag_name: "LABEL"
@@ -2249,10 +2414,6 @@ tags: {
   attrs: { name: "min" }
   attrs: { name: "minlength" }
   attrs: { name: "multiple" }
-  attrs: {
-    name: "name"
-    blacklisted_value_regex: "__amp_source_origin"
-  }
   attrs: { name: "pattern" }
   attrs: { name: "placeholder" }
   attrs: { name: "readonly" }
@@ -2273,6 +2434,7 @@ tags: {
   }
   attrs: { name: "value" }
   attrs: { name: "width" }
+  attr_lists: "input-name-attr"
   spec_url: "https://www.ampproject.org/docs/reference/extended/amp-form.html"
 }
 # 4.10.6 The button element
@@ -2282,7 +2444,6 @@ tags: {
     name: "disabled"
     value: ""
   }
-  attrs: { name: "name" }
   attrs: {
     name: "role"
     implicit: true
@@ -2293,6 +2454,7 @@ tags: {
   }
   attrs: { name: "type" }
   attrs: { name: "value" }
+  attr_lists: "input-name-attr"
 }
 # Button variant specifically supporting <amp-app-banner> tag with the
 # open-button attribute.
@@ -2304,7 +2466,6 @@ tags: {
     name: "open-button"
     value: ""
   }
-  attrs: { name: "name" }
   attrs: {
     name: "role"
     implicit: true
@@ -2315,6 +2476,7 @@ tags: {
   }
   attrs: { name: "type" }
   attrs: { name: "value" }
+  attr_lists: "input-name-attr"
 }
 # 4.10.7 The select element
 tags: {
@@ -2324,9 +2486,9 @@ tags: {
   attrs: { name: "autofocus" }
   attrs: { name: "disabled" }
   attrs: { name: "multiple" }
-  attrs: { name: "name" }
   attrs: { name: "required" }
   attrs: { name: "size" }
+  attr_lists: "input-name-attr"
   spec_url: "https://www.ampproject.org/docs/reference/extended/amp-form.html"
 }
 # 4.10.8 The datalist element
@@ -2367,7 +2529,6 @@ tags: {
   attrs: { name: "disabled" }
   attrs: { name: "maxlength" }
   attrs: { name: "minlength" }
-  attrs: { name: "name" }
   attrs: { name: "placeholder" }
   attrs: { name: "readonly" }
   attrs: { name: "required" }
@@ -2377,13 +2538,37 @@ tags: {
   attrs: { name: "selectionstart" }
   attrs: { name: "spellcheck" }
   attrs: { name: "wrap"}
+  attr_lists: "input-name-attr"
   spec_url: "https://www.ampproject.org/docs/reference/extended/amp-form.html"
+}
+# 4.10.13 The output element
+tags: {
+  tag_name: "OUTPUT"
+  attrs: { name: "for" }
+  attrs: { name: "form" }
+  attr_lists: "input-name-attr"
+}
+# 4.10.14 The progress element
+tags: {
+  tag_name: "PROGRESS"
+  attrs: { name: "max" }
+  attrs: { name: "value" }
+}
+# 4.10.15 The meter element
+tags: {
+  tag_name: "METER"
+  attrs: { name: "high" }
+  attrs: { name: "low" }
+  attrs: { name: "max" }
+  attrs: { name: "min" }
+  attrs: { name: "optimum" }
+  attrs: { name: "value" }
 }
 # 4.10.16 The fieldset element
 tags: {
   tag_name: "FIELDSET"
   attrs: { name: "disabled" }
-  attrs: { name: "name" }
+  attr_lists: "input-name-attr"
 }
 # 4.10.17 The legend element
 tags: {
@@ -2427,7 +2612,7 @@ tags: {
 tags: {
   html_format: AMP4ADS
   tag_name: "SCRIPT"
-  spec_name: "amp4ads engine a4a-v0.js script"
+  spec_name: "amp4ads engine amp4ads-v0.js script"
   mandatory: true
   unique: true
   mandatory_parent: "HEAD"
@@ -2627,39 +2812,6 @@ tags: {  # <amp-pixel>
     supported_layouts: NODISPLAY
   }
 }
-tags: {  # <amp-video>
-  html_format: AMP
-  html_format: AMP4ADS
-  tag_name: "AMP-VIDEO"
-  disallowed_ancestor: "AMP-SIDEBAR"
-  attrs: { name: "alt" }
-  attrs: { name: "attribution" }
-  attrs: { name: "autoplay" value: "" }
-  attrs: { name: "controls" value: "" }
-  attrs: { name: "loop"     value: "" }
-  attrs: { name: "muted"    value: "" }
-  attrs: { name: "placeholder" }
-  attrs: { name: "poster" }
-  attrs: { name: "preload" value_regex: "(none|metadata|auto|)" }
-  attrs: {
-    name: "src"
-    value_url: {
-      allowed_protocol: "https"
-      allow_relative: true  # Will be set to false at a future date.
-    }
-    blacklisted_value_regex: "__amp_source_origin"
-  }
-  attr_lists: "extended-amp-global"
-  spec_url: "https://www.ampproject.org/docs/reference/amp-video.html"
-  amp_layout: {
-    supported_layouts: FILL
-    supported_layouts: FIXED
-    supported_layouts: FIXED_HEIGHT
-    supported_layouts: FLEX_ITEM
-    supported_layouts: NODISPLAY
-    supported_layouts: RESPONSIVE
-  }
-}
 
 # AMP Layout attributes: implied for TagSpecs with amp_layout field
 # set. Note that while these attributes are defined as optional here,
@@ -2683,12 +2835,143 @@ attr_lists: {
   attrs: { name: "itemref" }
   attrs: { name: "itemscope" }
   attrs: { name: "itemtype" }
+  # Also for schema.org, RDFa syntax
+  attrs: { name: "about" }
+  attrs: { name: "content" }
+  attrs: { name: "datatype" }
+  attrs: { name: "inlist" }
+  attrs: { name: "prefix" }
+  attrs: { name: "property" }
+  attrs: { name: "resource" }
+  attrs: { name: "typeof" }
+  attrs: { name: "vocab" }
   # 3.2.5 HTML5 Global attributes.
   attrs: { name: "accesskey" }
-  attrs: { name: "class" }
+  attrs: {
+    name: "class"
+    blacklisted_value_regex: "(^|\\W)i-amphtml-"
+  }
   attrs: { name: "dir" }
   attrs: { name: "draggable" }
-  attrs: { name: "id" }
+  attrs: {
+    name: "id"
+    blacklisted_value_regex: "(^|\\s)("  # Values are space separated
+        "__count__|"
+        "__defineGetter__|"
+        "__defineSetter__|"
+        "__lookupGetter__|"
+        "__lookupSetter__|"
+        "__noSuchMethod__|"
+        "__parent__|"
+        "__proto__|"
+        "\\$p|"
+        "\\$proxy|"
+        "acceptCharset|"
+        "addEventListener|"
+        "appendChild|"
+        "assignedSlot|"
+        "attachShadow|"
+        "AMP|"
+        "baseURI|"
+        "checkValidity|"
+        "childElementCount|"
+        "childNodes|"
+        "classList|"
+        "className|"
+        "clientHeight|"
+        "clientLeft|"
+        "clientTop|"
+        "clientWidth|"
+        "compareDocumentPosition|"
+        "computedName|"
+        "computedRole|"
+        "contentEditable|"
+        "createShadowRoot|"
+        "firstChild|"
+        "firstElementChild|"
+        "getAnimations|"
+        "getAttribute|"
+        "getAttributeNS|"
+        "getAttributeNode|"
+        "getAttributeNodeNS|"
+        "getBoundingClientRect|"
+        "getClientRects|"
+        "getDestinationInsertionPoints|"
+        "getElementsByClassName|"
+        "getElementsByTagName|"
+        "getElementsByTagNameNS|"
+        "getRootNode|"
+        "hasAttribute|"
+        "hasAttributeNS|"
+        "hasAttributes|"
+        "hasChildNodes|"
+        "hasPointerCapture|"
+        "i-amphtml-.*|"
+        "innerHTML|"
+        "innerText|"
+        "inputMode|"
+        "insertAdjacentElement|"
+        "insertAdjacentHTML|"
+        "insertAdjacentText|"
+        "isContentEditable|"
+        "isDefaultNamespace|"
+        "isEqualNode|"
+        "isSameNode|"
+        "lastChild|"
+        "lastElementChild|"
+        "lookupNamespaceURI|"
+        "namespaceURI|"
+        "nextElementSibling|"
+        "nextSibling|"
+        "nodeName|"
+        "nodeType|"
+        "nodeValue|"
+        "offsetHeight|"
+        "offsetLeft|"
+        "offsetParent|"
+        "offsetTop|"
+        "offsetWidth|"
+        "outerHTML|"
+        "outerText|"
+        "ownerDocument|"
+        "parentElement|"
+        "parentNode|"
+        "previousElementSibling|"
+        "previousSibling|"
+        "querySelector|"
+        "querySelectorAll|"
+        "releasePointerCapture|"
+        "removeAttribute|"
+        "removeAttributeNS|"
+        "removeAttributeNode|"
+        "removeChild|"
+        "removeEventListener|"
+        "replaceChild|"
+        "reportValidity|"
+        "requestPointerLock|"
+        "scrollHeight|"
+        "scrollIntoView|"
+        "scrollIntoViewIfNeeded|"
+        "scrollLeft|"
+        "scrollWidth|"
+        "setAttribute|"
+        "setAttributeNS|"
+        "setAttributeNode|"
+        "setAttributeNodeNS|"
+        "setPointerCapture|"
+        "shadowRoot|"
+        "styleMap|"
+        "tabIndex|"
+        "tagName|"
+        "textContent|"
+        "toString|"
+        "valueOf|"
+        "(webkit|ms|moz|o)dropzone|"
+        "(webkit|moz|ms|o)MatchesSelector|"
+        "(webkit|moz|ms|o)RequestFullScreen|"
+        "(webkit|moz|ms|o)RequestFullscreen"
+        ")(\\s|$)"
+  }
   attrs: { name: "lang" }
   attrs: { name: "tabindex" }
   attrs: { name: "title" }
@@ -2786,9 +3069,6 @@ attr_lists: {
   }
 }
 
-manufactured_body_tag_is_error: true
-manufactured_body_spec_url: ""  # TODO(gregable)
-
 # Error Specificity: Used in the verbose validator to select between multiple
 # generated error types for a failing error. A higher number means that the
 # error is more specific, ie: more helpful, preferred.
@@ -2802,101 +3082,101 @@ error_specificity { code: MANDATORY_TAG_ANCESTOR_WITH_HINT specificity: 6 }
 error_specificity { code: MANDATORY_TAG_MISSING specificity: 7 }
 error_specificity { code: TAG_REQUIRED_BY_MISSING specificity: 8 }
 error_specificity { code: WARNING_TAG_REQUIRED_BY_MISSING specificity: 9 }
-error_specificity { code: ATTR_REQUIRED_BUT_MISSING specificity: 10 }
-error_specificity { code: DISALLOWED_TAG specificity: 11 }
-error_specificity { code: DISALLOWED_ATTR specificity: 12 }
-error_specificity { code: INVALID_ATTR_VALUE specificity: 13 }
-error_specificity { code: ATTR_VALUE_REQUIRED_BY_LAYOUT specificity: 14 }
-error_specificity { code: MANDATORY_ATTR_MISSING specificity: 15 }
-error_specificity { code: MANDATORY_ONEOF_ATTR_MISSING specificity: 16 }
-error_specificity { code: DUPLICATE_UNIQUE_TAG specificity: 17 }
-error_specificity { code: DUPLICATE_UNIQUE_TAG_WARNING specificity: 18 }
-error_specificity { code: STYLESHEET_TOO_LONG_OLD_VARIANT specificity: 19 }
-error_specificity { code: STYLESHEET_TOO_LONG specificity: 20 }
-error_specificity { code: CSS_SYNTAX specificity: 21 }
-error_specificity { code: CSS_SYNTAX_INVALID_AT_RULE specificity: 22 }
+error_specificity { code: WARNING_EXTENSION_UNUSED specificity: 10 }
+error_specificity { code: ATTR_REQUIRED_BUT_MISSING specificity: 11 }
+error_specificity { code: DISALLOWED_TAG specificity: 12 }
+error_specificity { code: DISALLOWED_ATTR specificity: 13 }
+error_specificity { code: INVALID_ATTR_VALUE specificity: 14 }
+error_specificity { code: ATTR_VALUE_REQUIRED_BY_LAYOUT specificity: 15 }
+error_specificity { code: MANDATORY_ATTR_MISSING specificity: 16 }
+error_specificity { code: MANDATORY_ONEOF_ATTR_MISSING specificity: 17 }
+error_specificity { code: DUPLICATE_UNIQUE_TAG specificity: 18 }
+error_specificity { code: DUPLICATE_UNIQUE_TAG_WARNING specificity: 19 }
+error_specificity { code: STYLESHEET_TOO_LONG_OLD_VARIANT specificity: 20 }
+error_specificity { code: STYLESHEET_TOO_LONG specificity: 21 }
+error_specificity { code: CSS_SYNTAX specificity: 22 }
+error_specificity { code: CSS_SYNTAX_INVALID_AT_RULE specificity: 23 }
 error_specificity {
-  code: MANDATORY_PROPERTY_MISSING_FROM_ATTR_VALUE specificity: 23
+  code: MANDATORY_PROPERTY_MISSING_FROM_ATTR_VALUE specificity: 24
 }
-error_specificity { code: INVALID_PROPERTY_VALUE_IN_ATTR_VALUE specificity: 24 }
-error_specificity { code: DISALLOWED_PROPERTY_IN_ATTR_VALUE specificity: 25 }
-error_specificity { code: MUTUALLY_EXCLUSIVE_ATTRS specificity: 26 }
-error_specificity { code: UNESCAPED_TEMPLATE_IN_ATTR_VALUE specificity: 27 }
-error_specificity { code: TEMPLATE_PARTIAL_IN_ATTR_VALUE specificity: 28 }
-error_specificity { code: TEMPLATE_IN_ATTR_NAME specificity: 29 }
+error_specificity { code: INVALID_PROPERTY_VALUE_IN_ATTR_VALUE specificity: 25 }
+error_specificity { code: DISALLOWED_PROPERTY_IN_ATTR_VALUE specificity: 26 }
+error_specificity { code: MUTUALLY_EXCLUSIVE_ATTRS specificity: 27 }
+error_specificity { code: UNESCAPED_TEMPLATE_IN_ATTR_VALUE specificity: 28 }
+error_specificity { code: TEMPLATE_PARTIAL_IN_ATTR_VALUE specificity: 29 }
+error_specificity { code: TEMPLATE_IN_ATTR_NAME specificity: 30 }
 error_specificity {
-  code: INCONSISTENT_UNITS_FOR_WIDTH_AND_HEIGHT specificity: 30
+  code: INCONSISTENT_UNITS_FOR_WIDTH_AND_HEIGHT specificity: 31
 }
-error_specificity { code: IMPLIED_LAYOUT_INVALID specificity: 31 }
-error_specificity { code: SPECIFIED_LAYOUT_INVALID specificity: 32 }
-error_specificity { code: DEV_MODE_ENABLED specificity: 33 }
-error_specificity { code: ATTR_DISALLOWED_BY_IMPLIED_LAYOUT specificity: 34 }
-error_specificity { code: ATTR_DISALLOWED_BY_SPECIFIED_LAYOUT specificity: 35 }
-error_specificity { code: DUPLICATE_DIMENSION specificity: 36 }
-error_specificity { code: DISALLOWED_RELATIVE_URL specificity: 37 }
-error_specificity { code: MISSING_URL specificity: 38 }
-error_specificity { code: DISALLOWED_DOMAIN specificity: 39 }
-error_specificity { code: INVALID_URL_PROTOCOL specificity: 40 }
-error_specificity { code: INVALID_URL specificity: 41 }
-error_specificity { code: CSS_SYNTAX_STRAY_TRAILING_BACKSLASH specificity: 42 }
-error_specificity { code: CSS_SYNTAX_UNTERMINATED_COMMENT specificity: 43 }
-error_specificity { code: CSS_SYNTAX_UNTERMINATED_STRING specificity: 44 }
-error_specificity { code: CSS_SYNTAX_BAD_URL specificity: 45 }
+error_specificity { code: IMPLIED_LAYOUT_INVALID specificity: 32 }
+error_specificity { code: SPECIFIED_LAYOUT_INVALID specificity: 33 }
+error_specificity { code: DEV_MODE_ENABLED specificity: 34 }
+error_specificity { code: ATTR_DISALLOWED_BY_IMPLIED_LAYOUT specificity: 35 }
+error_specificity { code: ATTR_DISALLOWED_BY_SPECIFIED_LAYOUT specificity: 36 }
+error_specificity { code: DUPLICATE_DIMENSION specificity: 37 }
+error_specificity { code: DISALLOWED_RELATIVE_URL specificity: 38 }
+error_specificity { code: MISSING_URL specificity: 39 }
+error_specificity { code: DISALLOWED_DOMAIN specificity: 40 }
+error_specificity { code: INVALID_URL_PROTOCOL specificity: 41 }
+error_specificity { code: INVALID_URL specificity: 42 }
+error_specificity { code: CSS_SYNTAX_STRAY_TRAILING_BACKSLASH specificity: 43 }
+error_specificity { code: CSS_SYNTAX_UNTERMINATED_COMMENT specificity: 44 }
+error_specificity { code: CSS_SYNTAX_UNTERMINATED_STRING specificity: 45 }
+error_specificity { code: CSS_SYNTAX_BAD_URL specificity: 46 }
 error_specificity {
-  code: CSS_SYNTAX_EOF_IN_PRELUDE_OF_QUALIFIED_RULE specificity: 46
+  code: CSS_SYNTAX_EOF_IN_PRELUDE_OF_QUALIFIED_RULE specificity: 47
 }
-error_specificity { code: CSS_SYNTAX_INVALID_DECLARATION specificity: 47 }
-error_specificity { code: CSS_SYNTAX_INCOMPLETE_DECLARATION specificity: 48 }
-error_specificity { code: CSS_SYNTAX_ERROR_IN_PSEUDO_SELECTOR specificity: 49 }
-error_specificity { code: CSS_SYNTAX_MISSING_SELECTOR specificity: 50 }
-error_specificity { code: CSS_SYNTAX_NOT_A_SELECTOR_START specificity: 51 }
+error_specificity { code: CSS_SYNTAX_INVALID_DECLARATION specificity: 48 }
+error_specificity { code: CSS_SYNTAX_INCOMPLETE_DECLARATION specificity: 49 }
+error_specificity { code: CSS_SYNTAX_ERROR_IN_PSEUDO_SELECTOR specificity: 50 }
+error_specificity { code: CSS_SYNTAX_MISSING_SELECTOR specificity: 51 }
+error_specificity { code: CSS_SYNTAX_NOT_A_SELECTOR_START specificity: 52 }
 error_specificity {
-  code: CSS_SYNTAX_UNPARSED_INPUT_REMAINS_IN_SELECTOR specificity: 52
+  code: CSS_SYNTAX_UNPARSED_INPUT_REMAINS_IN_SELECTOR specificity: 53
 }
-error_specificity { code: CSS_SYNTAX_MISSING_URL specificity: 53 }
-error_specificity { code: CSS_SYNTAX_DISALLOWED_DOMAIN specificity: 54 }
-error_specificity { code: CSS_SYNTAX_INVALID_URL specificity: 55 }
-error_specificity { code: CSS_SYNTAX_INVALID_URL_PROTOCOL specificity: 56 }
-error_specificity { code: CSS_SYNTAX_DISALLOWED_RELATIVE_URL specificity: 57 }
-error_specificity { code: INCORRECT_NUM_CHILD_TAGS specificity: 58 }
-error_specificity { code: DISALLOWED_CHILD_TAG_NAME specificity: 59 }
-error_specificity { code: DISALLOWED_FIRST_CHILD_TAG_NAME specificity: 60 }
-error_specificity { code: CSS_SYNTAX_INVALID_ATTR_SELECTOR specificity: 61 }
+error_specificity { code: CSS_SYNTAX_MISSING_URL specificity: 54 }
+error_specificity { code: CSS_SYNTAX_DISALLOWED_DOMAIN specificity: 55 }
+error_specificity { code: CSS_SYNTAX_INVALID_URL specificity: 56 }
+error_specificity { code: CSS_SYNTAX_INVALID_URL_PROTOCOL specificity: 57 }
+error_specificity { code: CSS_SYNTAX_DISALLOWED_RELATIVE_URL specificity: 58 }
+error_specificity { code: INCORRECT_NUM_CHILD_TAGS specificity: 59 }
+error_specificity { code: DISALLOWED_CHILD_TAG_NAME specificity: 60 }
+error_specificity { code: DISALLOWED_FIRST_CHILD_TAG_NAME specificity: 61 }
+error_specificity { code: CSS_SYNTAX_INVALID_ATTR_SELECTOR specificity: 62 }
 error_specificity {
-  code: CHILD_TAG_DOES_NOT_SATISFY_REFERENCE_POINT specificity: 62
+  code: CHILD_TAG_DOES_NOT_SATISFY_REFERENCE_POINT specificity: 63
 }
-error_specificity { code: MANDATORY_REFERENCE_POINT_MISSING specificity: 63 }
-error_specificity { code: DUPLICATE_REFERENCE_POINT specificity: 64 }
-error_specificity { code: TAG_REFERENCE_POINT_CONFLICT specificity: 65 }
+error_specificity { code: MANDATORY_REFERENCE_POINT_MISSING specificity: 64 }
+error_specificity { code: DUPLICATE_REFERENCE_POINT specificity: 65 }
+error_specificity { code: TAG_REFERENCE_POINT_CONFLICT specificity: 66 }
 error_specificity {
   code: CHILD_TAG_DOES_NOT_SATISFY_REFERENCE_POINT_SINGULAR
-  specificity: 66
+  specificity: 67
 }
-error_specificity { code: CSS_SYNTAX_DISALLOWED_PROPERTY_VALUE specificity: 67 }
+error_specificity { code: CSS_SYNTAX_DISALLOWED_PROPERTY_VALUE specificity: 68 }
 error_specificity {
   code: CSS_SYNTAX_DISALLOWED_PROPERTY_VALUE_WITH_HINT
-  specificity: 68
-}
-error_specificity {
-  code: CSS_SYNTAX_PROPERTY_DISALLOWED_WITHIN_AT_RULE
   specificity: 69
 }
 error_specificity {
-  code: CSS_SYNTAX_PROPERTY_DISALLOWED_TOGETHER_WITH
+  code: CSS_SYNTAX_PROPERTY_DISALLOWED_WITHIN_AT_RULE
   specificity: 70
 }
 error_specificity {
-  code: CSS_SYNTAX_PROPERTY_REQUIRES_QUALIFICATION
+  code: CSS_SYNTAX_PROPERTY_DISALLOWED_TOGETHER_WITH
   specificity: 71
 }
 error_specificity {
-  code: BASE_TAG_MUST_PRECEED_ALL_URLS
+  code: CSS_SYNTAX_PROPERTY_REQUIRES_QUALIFICATION
   specificity: 72
+}
+error_specificity {
+  code: BASE_TAG_MUST_PRECEED_ALL_URLS
+  specificity: 73
 }
 error_specificity { code: GENERAL_DISALLOWED_TAG specificity: 100 }
 error_specificity { code: DEPRECATED_ATTR specificity: 101 }
 error_specificity { code: DEPRECATED_TAG specificity: 102 }
-error_specificity { code: DEPRECATED_MANUFACTURED_BODY specificity: 103 }
 error_specificity { code: DISALLOWED_MANUFACTURED_BODY specificity: 104 }
 
 
@@ -2917,6 +3197,11 @@ error_formats {
   code: WARNING_TAG_REQUIRED_BY_MISSING
   format: "The tag '%1' is missing or incorrect, but required by '%2'. "
           "This will soon be an error."
+}
+error_formats {
+  code: WARNING_EXTENSION_UNUSED
+  format: "The extension '%1' was found on this page, but is unused "
+          "(no '%2' tag seen). This may become an error in the future."
 }
 error_formats {
   code: ATTR_REQUIRED_BUT_MISSING
@@ -3108,11 +3393,6 @@ error_formats {
   code: DISALLOWED_MANUFACTURED_BODY
   format: "Tag or text which is only allowed inside the body section found "
           "outside of the body section."
-}
-error_formats {
-  code: DEPRECATED_MANUFACTURED_BODY
-  format: "Tag or text which is only allowed inside the body section found "
-          "outside of the body section. This will soon be an error."
 }
 error_formats {
   code: CHILD_TAG_DOES_NOT_SATISFY_REFERENCE_POINT

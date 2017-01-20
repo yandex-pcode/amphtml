@@ -27,7 +27,8 @@ import {xhrFor} from '../../../../src/xhr';
 import {timerFor} from '../../../../src/timer';
 import '../../../amp-analytics/0.1/amp-analytics';
 import * as sinon from 'sinon';
-
+import {AmpDocSingle} from '../../../../src/service/ampdoc-impl';
+import {viewerForDoc} from '../../../../src/viewer';
 
 describe('amp-app-banner', () => {
 
@@ -38,6 +39,7 @@ describe('amp-app-banner', () => {
   let isIos = false;
   let isChrome = false;
   let isSafari = false;
+  let isEmbedded = false;
 
   const meta = {
     content: 'app-id=828256236, app-argument=medium://p/cb7f223fad86',
@@ -67,6 +69,9 @@ describe('amp-app-banner', () => {
 
   function getTestFrame() {
     return createIframePromise(true).then(iframe => {
+      const ampdoc = new AmpDocSingle(iframe.win);
+      const viewer = viewerForDoc(ampdoc);
+      sandbox.stub(viewer, 'isEmbedded', () => isEmbedded);
       platform = platformFor(iframe.win);
       sandbox.stub(platform, 'isIos', () => isIos);
       sandbox.stub(platform, 'isAndroid', () => isAndroid);
@@ -97,13 +102,15 @@ describe('amp-app-banner', () => {
         iframe.doc.head.appendChild(meta);
       }
 
-      if (config.manifest) {
+      const manifestObj = config.originManifest || config.manifest;
+      if (manifestObj) {
+        const rel = config.originManifest ? 'origin-manifest' : 'manifest';
         const manifest = iframe.doc.createElement('link');
-        manifest.setAttribute('rel', 'amp-manifest');
-        manifest.setAttribute('href', config.manifest.href);
+        manifest.setAttribute('rel', rel);
+        manifest.setAttribute('href', manifestObj.href);
         iframe.doc.head.appendChild(manifest);
         sandbox.mock(xhrFor(iframe.win)).expects('fetchJson')
-            .returns(Promise.resolve(config.manifest.content));
+            .returns(Promise.resolve(manifestObj.content));
       }
 
       const banner = iframe.doc.createElement('amp-app-banner');
@@ -153,6 +160,42 @@ describe('amp-app-banner', () => {
     });
   }
 
+  function testManifestPreconnectPreload(rel) {
+    const config = {};
+    config[rel] = manifest;
+    return () => {
+      return getAppBanner(config).then(banner => {
+        const impl = banner.implementation_;
+        sandbox.stub(impl.preconnect, 'url');
+        sandbox.stub(impl.preconnect, 'preload');
+        impl.preconnectCallback(true);
+        expect(impl.preconnect.url.called).to.be.true;
+        expect(impl.preconnect.url.callCount).to.equal(1);
+        expect(impl.preconnect.url.calledWith('https://play.google.com'))
+            .to.be.true;
+        expect(impl.preconnect.preload.called).to.be.true;
+        expect(impl.preconnect.preload.callCount).to.equal(1);
+        expect(impl.preconnect.preload.calledWith(
+            'https://example.com/manifest.json')).to.be.true;
+      });
+    };
+  }
+
+  function testManifestParseAndHrefs(rel) {
+    const config = {};
+    config[rel] = manifest;
+    return () => {
+      sandbox.spy(AbstractAppBanner.prototype, 'setupOpenButton_');
+      return getAppBanner({manifest}).then(el => {
+        expect(AbstractAppBanner.prototype.setupOpenButton_.calledWith(
+            el.querySelector('button[open-button]'),
+            'android-app://com.medium.reader/https/example.com/amps.html',
+            'https://play.google.com/store/apps/details?id=com.medium.reader'
+        )).to.be.true;
+      });
+    };
+  }
+
   beforeEach(() => {
     sandbox = sinon.sandbox.create();
     platform = platformFor(window);
@@ -164,6 +207,7 @@ describe('amp-app-banner', () => {
     isIos = false;
     isChrome = false;
     isSafari = false;
+    isEmbedded = false;
   });
 
   afterEach(() => {
@@ -232,8 +276,17 @@ describe('amp-app-banner', () => {
       });
     });
 
-    it('should remove banner if safari', () => {
+    it('should remove banner if safari and not embedded', () => {
       isSafari = true;
+      isEmbedded = false;
+      return getAppBanner().then(banner => {
+        expect(banner.parentElement).to.be.null;
+      });
+    });
+
+    it('should remove banner if safari and embedded', () => {
+      isSafari = true;
+      isEmbedded = true;
       return getAppBanner().then(banner => {
         expect(banner.parentElement).to.be.null;
       });
@@ -261,22 +314,10 @@ describe('amp-app-banner', () => {
       isChrome = false;
     });
 
-    it('should preconnect to play store and preload manifest', () => {
-      return getAppBanner({manifest}).then(banner => {
-        const impl = banner.implementation_;
-        sandbox.stub(impl.preconnect, 'url');
-        sandbox.stub(impl.preconnect, 'preload');
-        impl.preconnectCallback(true);
-        expect(impl.preconnect.url.called).to.be.true;
-        expect(impl.preconnect.url.callCount).to.equal(1);
-        expect(impl.preconnect.url.calledWith('https://play.google.com'))
-            .to.be.true;
-        expect(impl.preconnect.preload.called).to.be.true;
-        expect(impl.preconnect.preload.callCount).to.equal(1);
-        expect(impl.preconnect.preload.calledWith(
-            'https://example.com/manifest.json')).to.be.true;
-      });
-    });
+    it('should preconnect to play store and preload manifest',
+        testManifestPreconnectPreload('manifest'));
+    it('should preconnect to play store and preload origin-manifest',
+        testManifestPreconnectPreload('originManifest'));
 
     it('should throw if open button is missing', testButtonMissing);
     it('should add dismiss button and update padding', testAddDismissButton);
@@ -288,6 +329,12 @@ describe('amp-app-banner', () => {
       });
     });
 
+    it('should remove banner if origin-manifest is not provided', () => {
+      return getAppBanner({originManifest: null}).then(banner => {
+        expect(banner.parentElement).to.be.null;
+      });
+    });
+
     it('should remove banner if chrome', () => {
       isChrome = true;
       return getAppBanner().then(banner => {
@@ -295,16 +342,10 @@ describe('amp-app-banner', () => {
       });
     });
 
-    it('should parse manifest and set hrefs', () => {
-      sandbox.spy(AbstractAppBanner.prototype, 'setupOpenButton_');
-      return getAppBanner({manifest}).then(el => {
-        expect(AbstractAppBanner.prototype.setupOpenButton_.calledWith(
-            el.querySelector('button[open-button]'),
-            'android-app://com.medium.reader/https/example.com/amps.html',
-            'https://play.google.com/store/apps/details?id=com.medium.reader'
-        )).to.be.true;
-      });
-    });
+    it('should parse manifest and set hrefs',
+        testManifestParseAndHrefs('manifest'));
+    it('should parse manifest and set hrefs',
+        testManifestParseAndHrefs('originManifest'));
   });
 
   describe('Abstract App Banner', () => {

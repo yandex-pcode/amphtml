@@ -16,7 +16,7 @@
 
 import {isExperimentOn} from '../../../src/experiments';
 import {xhrFor} from '../../../src/xhr';
-import {viewerForDoc} from '../../../src/viewer';
+import {historyForDoc} from '../../../src/history';
 import {getService} from '../../../src/service';
 import {Layout} from '../../../src/layout';
 import {base64UrlEncodeFromBytes} from '../../../src/utils/base64';
@@ -83,7 +83,7 @@ export class AmpShareTracking extends AMP.BaseElement {
         const newFragment = this.getNewViewerFragment_(incomingFragment,
             outgoingFragment);
         // Update the viewer fragment with leading '#'
-        viewerForDoc(this.getAmpDoc()).updateFragment('#' + newFragment);
+        this.getHistory_().updateFragment('#' + newFragment);
       }
       return {incomingFragment, outgoingFragment};
     });
@@ -111,7 +111,7 @@ export class AmpShareTracking extends AMP.BaseElement {
    * @private
    */
   getOriginalViewerFragment_() {
-    return viewerForDoc(this.getAmpDoc()).getFragment().then(fragment => {
+    return this.getHistory_().getFragment().then(fragment => {
       this.originalViewerFragment_ = fragment;
       return fragment;
     });
@@ -142,7 +142,6 @@ export class AmpShareTracking extends AMP.BaseElement {
     const postReq = {
       method: 'POST',
       credentials: 'include',
-      requireAmpResponseSourceOrigin: true,
       body: {},
     };
     return xhrFor(this.win).fetchJson(vendorUrl, postReq).then(response => {
@@ -206,8 +205,15 @@ export class AmpShareTracking extends AMP.BaseElement {
     return result;
   }
 
+  /** @private @return {!../../../src/service/history-impl.History} */
+  getHistory_() {
+    return historyForDoc(this.getAmpDoc());
+  }
+
 }
 
 
 // Install the extension.
-AMP.registerElement('amp-share-tracking', AmpShareTracking);
+AMP.extension(TAG, '0.1', function(AMP) {
+  AMP.registerElement(TAG, AmpShareTracking);
+});

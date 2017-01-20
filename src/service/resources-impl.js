@@ -32,6 +32,8 @@ import {isArray} from '../types';
 import {dev} from '../log';
 import {reportError} from '../error';
 import {filterSplice} from '../utils/array';
+import {getSourceUrl} from '../url';
+import {areMarginsChanged} from '../layout-rect';
 
 
 const TAG_ = 'Resources';
@@ -50,9 +52,19 @@ const FOUR_FRAME_DELAY_ = 70;
 /**
  * The internal structure of a ChangeHeightRequest.
  * @typedef {{
+ *   newMargins: !../layout-rect.LayoutMarginsChangeDef,
+ *   currentMargins: !../layout-rect.LayoutMarginsDef
+ * }}
+ */
+let MarginChangeDef;
+
+/**
+ * The internal structure of a ChangeHeightRequest.
+ * @typedef {{
  *   resource: !Resource,
  *   newHeight: (number|undefined),
  *   newWidth: (number|undefined),
+ *   marginChange: (!MarginChangeDef|undefined),
  *   force: boolean,
  *   callback: (function(boolean)|undefined)
  * }}
@@ -310,6 +322,16 @@ export class Resources {
   }
 
   /**
+   * Returns the {@link Resource} instance corresponding to the specified AMP
+   * Element. Returns null if no resource is found.
+   * @param {!AmpElement} element
+   * @return {?Resource}
+   */
+  getResourceForElementOptional(element) {
+    return Resource.forElementOptional(element);
+  }
+
+  /**
    * Returns the viewport instance
    * @return {!./viewport-impl.Viewport}
    */
@@ -438,14 +460,18 @@ export class Resources {
 
   /**
    * @param {!Resource} resource
+   * @param {boolean=} opt_disconnect
    * @private
    */
-  removeResource_(resource) {
+  removeResource_(resource, opt_disconnect) {
     const index = this.resources_.indexOf(resource);
     if (index != -1) {
       this.resources_.splice(index, 1);
     }
     resource.pauseOnRemove();
+    if (opt_disconnect) {
+      resource.disconnect();
+    }
     this.cleanupTasks_(resource, /* opt_removePending */ true);
     dev().fine(TAG_, 'element removed:', resource.debugid);
   }
@@ -456,7 +482,7 @@ export class Resources {
    */
   removeForChildWindow(childWin) {
     const toRemove = this.resources_.filter(r => r.hostWin == childWin);
-    toRemove.forEach(r => this.removeResource_(r));
+    toRemove.forEach(r => this.removeResource_(r, /* disconnect */ true));
   }
 
   /**
@@ -562,6 +588,28 @@ export class Resources {
   }
 
   /**
+   * Updates the priority of the resource. If there are tasks currently
+   * scheduled, their priority is updated as well.
+   * @param {!Element} element
+   * @param {number} newPriority
+   * @restricted
+   */
+  updatePriority(element, newPriority) {
+    const resource = Resource.forElement(element);
+
+    resource.updatePriority(newPriority);
+
+    // Update affected tasks
+    this.queue_.forEach(task => {
+      if (task.resource == resource) {
+        task.priority = newPriority;
+      }
+    });
+
+    this.schedulePass();
+  }
+
+  /**
    * A parent resource, especially in when it's an owner (see {@link setOwner}),
    * may request the Resources manager to update children's inViewport state.
    * A child's inViewport state is a logical AND between inLocalViewport
@@ -584,10 +632,11 @@ export class Resources {
    * @param {number|undefined} newHeight
    * @param {number|undefined} newWidth
    * @param {function()=} opt_callback A callback function.
+   * @param {!../layout-rect.LayoutMarginsChangeDef=} opt_newMargins
    */
-  changeSize(element, newHeight, newWidth, opt_callback) {
+  changeSize(element, newHeight, newWidth, opt_callback, opt_newMargins) {
     this.scheduleChangeSize_(Resource.forElement(element), newHeight,
-        newWidth, /* force */ true, opt_callback);
+        newWidth, opt_newMargins, /* force */ true, opt_callback);
   }
 
   /**
@@ -605,14 +654,13 @@ export class Resources {
    * @param {!Element} element
    * @param {number|undefined} newHeight
    * @param {number|undefined} newWidth
+   * @param {!../layout-rect.LayoutMarginsChangeDef=} opt_newMargins
    * @return {!Promise}
-   * @protected
    */
-
-  attemptChangeSize(element, newHeight, newWidth) {
+  attemptChangeSize(element, newHeight, newWidth, opt_newMargins) {
     return new Promise((resolve, reject) => {
       this.scheduleChangeSize_(Resource.forElement(element), newHeight,
-        newWidth, /* force */ false, success => {
+        newWidth, opt_newMargins, /* force */ false, success => {
           if (success) {
             resolve();
           } else {
@@ -663,11 +711,11 @@ export class Resources {
         mutator();
 
         // Mark itself and children for re-measurement.
-        if (element.classList.contains('-amp-element')) {
+        if (element.classList.contains('i-amphtml-element')) {
           const r = Resource.forElement(element);
           r.requestMeasure();
         }
-        const ampElements = element.getElementsByClassName('-amp-element');
+        const ampElements = element.getElementsByClassName('i-amphtml-element');
         for (let i = 0; i < ampElements.length; i++) {
           const r = Resource.forElement(ampElements[i]);
           r.requestMeasure();
@@ -749,7 +797,12 @@ export class Resources {
 
     if (this.documentReady_ && this.firstPassAfterDocumentReady_) {
       this.firstPassAfterDocumentReady_ = false;
-      this.viewer_.postDocumentReady();
+      const doc = this.win.document;
+      this.viewer_.sendMessage('documentLoaded', {
+        title: doc.title,
+        sourceUrl: getSourceUrl(this.ampdoc.getUrl()),
+        serverLayout: doc.documentElement.hasAttribute('i-amphtml-element'),
+      }, /* cancelUnsent */true);
     }
 
     const viewportSize = this.viewport_.getSize();
@@ -828,12 +881,34 @@ export class Resources {
         const resource = request.resource;
         const box = resource.getLayoutBox();
         const iniBox = resource.getInitialLayoutBox();
-        const diff = request.newHeight - box.height;
+
+        let topMarginDiff = 0;
+        let bottomMarginDiff = 0;
+        let bottomDisplacedBoundary = box.bottom;
+        let newMargins = undefined;
+        if (request.marginChange) {
+          newMargins = request.marginChange.newMargins;
+          const margins = request.marginChange.currentMargins;
+          if (newMargins.top != undefined) {
+            topMarginDiff = newMargins.top - margins.top;
+          }
+          if (newMargins.bottom != undefined) {
+            bottomMarginDiff = newMargins.bottom - margins.bottom;
+          }
+          if (bottomMarginDiff) {
+            // The lowest boundary of the element that would appear to be
+            // resized as a result of this size change. If the bottom margin is
+            // being changed then it is the bottom edge of the margin box,
+            // otherwise it is the bottom edge of the layout box as set above.
+            bottomDisplacedBoundary = box.bottom + margins.bottom;
+          }
+        }
+        const heightDiff = request.newHeight - box.height;
 
         // Check resize rules. It will either resize element immediately, or
         // wait until scrolling stops or will call the overflow callback.
         let resize = false;
-        if (diff == 0) {
+        if (heightDiff == 0 && topMarginDiff == 0 && bottomMarginDiff == 0) {
           // 1. Nothing to resize.
         } else if (request.force || !this.visible_) {
           // 2. An immediate execution requested or the document is hidden.
@@ -842,13 +917,13 @@ export class Resources {
           // 3. Active elements are immediately resized. The assumption is that
           // the resize is triggered by the user action or soon after.
           resize = true;
-        } else if (box.bottom + Math.min(diff, 0) >=
+        } else if (topMarginDiff == 0 && box.bottom + Math.min(heightDiff, 0) >=
               viewportRect.bottom - bottomOffset) {
           // 4. Elements under viewport are resized immediately, but only if
           // an element's boundary is not changed above the viewport after
           // resize.
           resize = true;
-        } else if (box.bottom <= viewportRect.top + topOffset) {
+        } else if (bottomDisplacedBoundary <= viewportRect.top + topOffset) {
           // 5. Elements above the viewport can only be resized when scrolling
           // has stopped, otherwise defer util next cycle.
           if (isScrollingStopped) {
@@ -865,13 +940,15 @@ export class Resources {
           // 6. Elements close to the bottom of the document (not viewport)
           // are resized immediately.
           resize = true;
-        } else if (diff < 0) {
-          // 7. The new height is smaller than the current one.
+        } else if (heightDiff < 0 || topMarginDiff < 0 ||
+              bottomMarginDiff < 0) {
+          // 7. The new height (or one of the margins) is smaller than the
+          // current one.
         } else {
           // 8. Element is in viewport don't resize and try overflow callback
           // instead.
           request.resource.overflowCallback(/* overflown */ true,
-              request.newHeight, request.newWidth);
+              request.newHeight, request.newWidth, newMargins);
         }
 
         if (resize) {
@@ -879,9 +956,9 @@ export class Resources {
             minTop = minTop == -1 ? box.top : Math.min(minTop, box.top);
           }
           request.resource./*OK*/changeSize(
-              request.newHeight, request.newWidth);
+              request.newHeight, request.newWidth, newMargins);
           request.resource.overflowCallback(/* overflown */ false,
-              request.newHeight, request.newWidth);
+              request.newHeight, request.newWidth, newMargins);
         }
 
         if (request.callback) {
@@ -906,7 +983,8 @@ export class Resources {
               const box = request.resource.getLayoutBox();
               minTop = minTop == -1 ? box.top : Math.min(minTop, box.top);
               request.resource./*OK*/changeSize(
-                  request.newHeight, request.newWidth);
+                  request.newHeight, request.newWidth, request.marginChange ?
+                      request.marginChange.newMargins : undefined);
               if (request.callback) {
                 request.callback(/* hasSizeChanged */true);
               }
@@ -953,7 +1031,8 @@ export class Resources {
     const pendingChangeSize = resource.getPendingChangeSize();
     if (pendingChangeSize !== undefined) {
       this.scheduleChangeSize_(resource, pendingChangeSize.height,
-          pendingChangeSize.width, /* force */ true);
+          pendingChangeSize.width, pendingChangeSize.margins,
+          /* force */ true);
     }
   }
 
@@ -1287,42 +1366,71 @@ export class Resources {
    * @param {!Resource} resource
    * @param {number|undefined} newHeight
    * @param {number|undefined} newWidth
+   * @param {!../layout-rect.LayoutMarginsChangeDef|undefined} newMargins
    * @param {boolean} force
    * @param {function(boolean)=} opt_callback A callback function
    * @private
    */
-  scheduleChangeSize_(resource, newHeight, newWidth, force,
+  scheduleChangeSize_(resource, newHeight, newWidth, newMargins, force,
       opt_callback) {
-    if (resource.hasBeenMeasured()) {
-      this.completeScheduleChangeSize_(resource, newHeight, newWidth, force,
-          opt_callback);
+    if (resource.hasBeenMeasured() && !newMargins) {
+      this.completeScheduleChangeSize_(resource, newHeight, newWidth,
+          undefined, force, opt_callback);
     } else {
       // This is a rare case since most of times the element itself schedules
       // resize requests. However, this case is possible when another element
-      // requests resize of a controlled element.
+      // requests resize of a controlled element. This also happens when a
+      // margin size change is requested, since existing margins have to be
+      // measured in this instance.
       this.vsync_.measure(() => {
-        resource.measure();
-        this.completeScheduleChangeSize_(resource, newHeight, newWidth, force,
-            opt_callback);
+        if (!resource.hasBeenMeasured()) {
+          resource.measure();
+        }
+        const marginChange = newMargins ? {
+          newMargins,
+          currentMargins: this.getLayoutMargins_(resource),
+        } : undefined;
+        this.completeScheduleChangeSize_(resource, newHeight, newWidth,
+            marginChange, force, opt_callback);
       });
     }
+  }
+
+  /**
+   * Returns the layout margins for the resource.
+   * @param {!Resource} resource
+   * @return {!../layout-rect.LayoutMarginsDef}
+   * @private
+   */
+  getLayoutMargins_(resource) {
+    const computedStyle = this.win./*OK*/getComputedStyle(resource.element);
+    return {
+      top: parseInt(computedStyle.marginTop, 10) || 0,
+      right: parseInt(computedStyle.marginRight, 10) || 0,
+      bottom: parseInt(computedStyle.marginBottom, 10) || 0,
+      left: parseInt(computedStyle.marginLeft, 10) || 0,
+    };
   }
 
   /**
    * @param {!Resource} resource
    * @param {number|undefined} newHeight
    * @param {number|undefined} newWidth
+   * @param {!MarginChangeDef|undefined} marginChange
    * @param {boolean} force
    * @param {function(boolean)=} opt_callback A callback function
    * @private
    */
-  completeScheduleChangeSize_(resource, newHeight, newWidth, force,
-      opt_callback) {
+  completeScheduleChangeSize_(resource, newHeight, newWidth, marginChange,
+      force, opt_callback) {
     resource.resetPendingChangeSize();
     const layoutBox = resource.getLayoutBox();
     if ((newHeight === undefined || newHeight == layoutBox.height) &&
-        (newWidth === undefined || newWidth == layoutBox.width)) {
-      if (newHeight === undefined && newWidth === undefined) {
+        (newWidth === undefined || newWidth == layoutBox.width) &&
+        (marginChange === undefined || !areMarginsChanged(
+            marginChange.currentMargins, marginChange.newMargins))) {
+      if (newHeight === undefined && newWidth === undefined &&
+          marginChange === undefined) {
         dev().error(
             TAG_, 'attempting to change size with undefined dimensions',
             resource.debugid);
@@ -1345,6 +1453,7 @@ export class Resources {
     if (request) {
       request.newHeight = newHeight;
       request.newWidth = newWidth;
+      request.marginChange = marginChange;
       request.force = force || request.force;
       request.callback = opt_callback;
     } else {
@@ -1352,6 +1461,7 @@ export class Resources {
         resource,
         newHeight,
         newWidth,
+        marginChange,
         force,
         callback: opt_callback,
       });
@@ -1506,7 +1616,7 @@ export class Resources {
    */
   discoverResourcesForElement_(element, callback) {
     // Breadth-first search.
-    if (element.classList.contains('-amp-element')) {
+    if (element.classList.contains('i-amphtml-element')) {
       callback(Resource.forElement(element));
       // Also schedule amp-element that is a placeholder for the element.
       const placeholder = element.getPlaceholder();
@@ -1514,7 +1624,7 @@ export class Resources {
         this.discoverResourcesForElement_(placeholder, callback);
       }
     } else {
-      const ampElements = element.getElementsByClassName('-amp-element');
+      const ampElements = element.getElementsByClassName('i-amphtml-element');
       const seen = [];
       for (let i = 0; i < ampElements.length; i++) {
         const ampElement = ampElements[i];
@@ -1672,7 +1782,8 @@ function elements_(elements) {
  * The internal structure of a ChangeHeightRequest.
  * @typedef {{
  *   height: (number|undefined),
- *   width: (number|undefined)
+ *   width: (number|undefined),
+ *   margins: (!../layout-rect.LayoutMarginsChangeDef|undefined)
  * }}
  */
 export let SizeDef;

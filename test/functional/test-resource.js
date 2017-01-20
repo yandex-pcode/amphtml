@@ -18,6 +18,7 @@ import {AmpDocSingle} from '../../src/service/ampdoc-impl';
 import {Resources} from '../../src/service/resources-impl';
 import {Resource, ResourceState} from '../../src/service/resource';
 import {layoutRectLtwh} from '../../src/layout-rect';
+import {viewerForDoc} from '../../src/viewer';
 import * as sinon from 'sinon';
 
 
@@ -52,15 +53,32 @@ describe('Resource', () => {
       pauseCallback: () => false,
       resumeCallback: () => false,
       viewportCallback: () => {},
+      disconnectedCallback: () => {},
       togglePlaceholder: () => sandbox.spy(),
       getPriority: () => 2,
       dispatchCustomEvent: () => {},
+      fakeComputedStyle: {
+        marginTop: '1px',
+        marginRight: '2px',
+        marginBottom: '3px',
+        marginLeft: '4px',
+      },
     };
     elementMock = sandbox.mock(element);
 
+    const viewer = viewerForDoc(document);
+    sandbox.stub(viewer, 'isRuntimeOn', () => false);
     resources = new Resources(new AmpDocSingle(window));
     resource = new Resource(1, element, resources);
     viewportMock = sandbox.mock(resources.viewport_);
+
+    resources.win = {
+      document,
+      getComputedStyle: el => {
+        return el.fakeComputedStyle ?
+            el.fakeComputedStyle : window.getComputedStyle(el);
+      },
+    };
   });
 
   afterEach(() => {
@@ -137,10 +155,7 @@ describe('Resource', () => {
         return false;
       },
     };
-    resource.resources_ = {
-      win: window,
-      getViewport: () => viewport,
-    };
+    resource.resources_.getViewport = () => viewport;
     expect(() => {
       resource.measure();
     }).to.not.throw();
@@ -457,7 +472,9 @@ describe('Resource', () => {
     elementMock.expects('getBoundingClientRect')
         .returns({left: 1, top: 1, width: 1, height: 1}).once();
 
-    elementMock.expects('layoutCallback').returns(Promise.reject()).once();
+    const error = new Error('intentional');
+    elementMock.expects('layoutCallback')
+        .returns(Promise.reject(error)).once();
 
     resource.state_ = ResourceState.READY_FOR_LAYOUT;
     resource.layoutBox_ = {left: 11, top: 12, width: 10, height: 10};
@@ -471,21 +488,48 @@ describe('Resource', () => {
     }, () => {
       expect(resource.getState()).to.equal(ResourceState.LAYOUT_FAILED);
       expect(resource.layoutPromise_).to.equal(null);
+      expect(resource.lastLayoutError_).to.equal(error);
+
+      // Should fail with the same error again.
+      return resource.startLayout(true);
+    }).then(() => {
+      /* global fail: false */
+      fail('should not be here');
+    }, reason => {
+      expect(reason).to.equal(error);
     });
   });
 
   it('should change size and update state', () => {
     resource.state_ = ResourceState.READY_FOR_LAYOUT;
-    elementMock.expects('changeSize').withExactArgs(111, 222).once();
-    resource.changeSize(111, 222);
+    elementMock.expects('changeSize').withExactArgs(111, 222,
+        {top: 1, right: 2, bottom: 3, left: 4}).once();
+    resource.changeSize(111, 222, {top: 1, right: 2, bottom: 3, left: 4});
     expect(resource.getState()).to.equal(ResourceState.NOT_LAID_OUT);
   });
 
   it('should change size but not state', () => {
     resource.state_ = ResourceState.NOT_BUILT;
-    elementMock.expects('changeSize').withExactArgs(111, 222).once();
-    resource.changeSize(111, 222);
+    elementMock.expects('changeSize').withExactArgs(111, 222,
+        {top: 1, right: 2, bottom: 3, left: 4}).once();
+    resource.changeSize(111, 222, {top: 1, right: 2, bottom: 3, left: 4});
     expect(resource.getState()).to.equal(ResourceState.NOT_BUILT);
+  });
+
+  it('should update priority', () => {
+    expect(resource.getPriority()).to.equal(2);
+
+    resource.updatePriority(2);
+    expect(resource.getPriority()).to.equal(2);
+
+    resource.updatePriority(3);
+    expect(resource.getPriority()).to.equal(3);
+
+    resource.updatePriority(1);
+    expect(resource.getPriority()).to.equal(1);
+
+    resource.updatePriority(0);
+    expect(resource.getPriority()).to.equal(0);
   });
 
 
@@ -709,6 +753,14 @@ describe('Resource', () => {
         resource.pauseOnRemove();
         expect(resource.isInViewport_).to.equal(false);
         expect(resource.paused_).to.equal(true);
+      });
+
+      it('should call disconnectedCallback on remove for built ele', () => {
+        expect(Resource.forElementOptional(resource.element))
+            .to.equal(resource);
+        elementMock.expects('disconnectedCallback').once();
+        resource.disconnect();
+        expect(Resource.forElementOptional(resource.element)).to.not.exist;
       });
     });
   });

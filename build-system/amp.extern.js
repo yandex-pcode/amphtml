@@ -24,6 +24,8 @@ window.context = {};
 window.context.amp3pSentinel;
 window.context.clientId;
 window.context.initialIntersection;
+window.context.sourceUrl;
+window.context.experimentToggles;
 
 // Service Holder
 window.services;

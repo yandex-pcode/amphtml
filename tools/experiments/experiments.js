@@ -67,13 +67,6 @@ const EXPERIMENTS = [
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/4005',
   },
   {
-    id: 'amp-fx-flying-carpet',
-    name: 'AMP Flying Carpet',
-    spec: 'https://github.com/ampproject/amphtml/blob/master/' +
-        'extensions/amp-fx-flying-carpet/amp-fx-flying-carpet.md',
-    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/4003',
-  },
-  {
     id: 'amp-access-server',
     name: 'AMP Access server side prototype',
     spec: '',
@@ -108,6 +101,12 @@ const EXPERIMENTS = [
     name: 'AMP Form Custom Validations',
     spec: 'https://github.com/ampproject/amphtml/issues/3343',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/5423',
+  },
+  {
+    id: 'amp-form-var-sub',
+    name: 'Variable Substitutions in AMP Form inputs',
+    spec: 'https://github.com/ampproject/amphtml/issues/5654',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6377',
   },
   {
     id: 'amp-google-vrview-image',
@@ -161,6 +160,12 @@ const EXPERIMENTS = [
     name: 'Guaranteed minimum freshness on sections of a page',
     spec: '',
     cleanupIssue: 'https://github.com/ampproject/amphtml/issues/4715',
+  },
+  {
+    id: 'amp-playbuzz',
+    name: 'AMP extension for playbuzz items (launched)',
+    spec: 'https://github.com/ampproject/amphtml/issues/6106',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/pull/6351',
   },
   {
     id: 'make-body-block',
@@ -225,6 +230,17 @@ const EXPERIMENTS = [
     id: 'amp-accordion-session-state-optout',
     name: 'AMP Accordion attribute to opt out of preserved state.',
     Spec: 'https://github.com/ampproject/amphtml/issues/3813',
+  },
+  {
+    id: '3p-frame-context-in-name',
+    name: 'Move passing context metadata from url hash to name attribute',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/6760',
+    Spec: '',
+  },
+  {
+    id: 'variable-filters',
+    name: 'Format to apply filters to analytics variables',
+    cleanupIssue: 'https://github.com/ampproject/amphtml/issues/2198',
   },
 ];
 
