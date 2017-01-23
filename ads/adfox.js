@@ -16,6 +16,7 @@
 
 import {loadScript, validateData} from '../3p/3p';
 import {yandex} from './yandex';
+import {createElementWithAttributes} from '../src/dom';
 
 /**
  * @param {!Window} global
@@ -36,8 +37,7 @@ export function adfox(global, data) {
  * @param {!Function} cb
  */
 function loadAdFox(global, cb) {
-    // loadScript(global, 'https://yastatic.net/pcode/adfox/loader.js', cb);
-    loadScript(global, 'http://localhost:9000/pcode-bundles/adfox.js', cb);
+    loadScript(global, 'https://yastatic.net/pcode/adfox/loader.js', cb);
 }
 
 /**
@@ -45,8 +45,9 @@ function loadAdFox(global, cb) {
  * @param {string} name
  */
 function createContainer(global, name) {
-    const d = global.document.createElement('div');
-    d.id = name;
+    const d = createElementWithAttributes(global.document, 'div', {
+        id: name
+    });
     global.document.getElementById('c').appendChild(d);
 }
 
@@ -61,7 +62,6 @@ function initAdFox(global, data) {
     createContainer(global, container_name);
 
     global.Ya.adfoxCode.create({
-        customDomain: '//localhost:9000/test.js?t=',
         ownerId: data.ownerId,
         containerId: container_name,
         params: params,
