@@ -41,7 +41,7 @@ function loadAdFox(global, cb) {
 }
 
 /**
- * @param {?Window} global
+ * @param {!Window} global
  * @param {string} name
  */
 function createContainer(global, name) {
@@ -52,7 +52,7 @@ function createContainer(global, name) {
 }
 
 /**
- * @param {?Window} global
+ * @param {!Window} global
  * @param {Object} data
  */
 function initAdFox(global, data) {
@@ -84,8 +84,6 @@ function checkLoading(global, data) {
         };
 
         yandex(global, dblParams);
-        return true;
+        return false;
     }
-
-    return false;
 }
