@@ -19,9 +19,12 @@
  */
 
 import './polyfills';
-import {chunk} from './chunk';
+import {startupChunk} from './chunk';
 import {fontStylesheetTimeout} from './font-stylesheet-timeout';
-import {installPerformanceService} from './service/performance-impl';
+import {
+  installPerformanceService,
+  performanceFor,
+} from './service/performance-impl';
 import {installPullToRefreshBlocker} from './pull-to-refresh';
 import {installGlobalClickListenerForDoc} from './document-click';
 import {installStyles, makeBodyVisible} from './style-installer';
@@ -62,33 +65,34 @@ try {
   makeBodyVisible(self.document);
   throw e;
 }
-chunk(self.document, function initial() {
+startupChunk(self.document, function initial() {
   /** @const {!./service/ampdoc-impl.AmpDoc} */
   const ampdoc = ampdocService.getAmpDoc(self.document);
+  installPerformanceService(self);
   /** @const {!./service/performance-impl.Performance} */
-  const perf = installPerformanceService(self);
+  const perf = performanceFor(self);
+  fontStylesheetTimeout(self);
   perf.tick('is');
   installStyles(self.document, cssText, () => {
-    chunk(self.document, function services() {
+    startupChunk(self.document, function services() {
       // Core services.
       installRuntimeServices(self);
-      fontStylesheetTimeout(self);
       installAmpdocServices(ampdoc);
       // We need the core services (viewer/resources) to start instrumenting
       perf.coreServicesAvailable();
       maybeTrackImpression(self);
     });
-    chunk(self.document, function builtins() {
+    startupChunk(self.document, function builtins() {
       // Builtins.
       installBuiltins(self);
     });
-    chunk(self.document, function adoptWindow() {
+    startupChunk(self.document, function adoptWindow() {
       adopt(self);
     });
-    chunk(self.document, function stub() {
+    startupChunk(self.document, function stub() {
       stubElements(self);
     });
-    chunk(self.document, function final() {
+    startupChunk(self.document, function final() {
       installPullToRefreshBlocker(self);
       installGlobalClickListenerForDoc(ampdoc);
 
@@ -96,7 +100,7 @@ chunk(self.document, function initial() {
       makeBodyVisible(self.document, /* waitForServices */ true);
       installCacheServiceWorker(self);
     });
-    chunk(self.document, function finalTick() {
+    startupChunk(self.document, function finalTick() {
       perf.tick('e_is');
       // TODO(erwinm): move invocation of the `flush` method when we have the
       // new ticks in place to batch the ticks properly.

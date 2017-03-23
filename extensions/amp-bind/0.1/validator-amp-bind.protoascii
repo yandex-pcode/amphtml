@@ -16,55 +16,33 @@
 tags: {  # amp-bind
   html_format: AMP
   tag_name: "SCRIPT"
-  spec_name: "amp-bind extension .js script"
-  mandatory_parent: "HEAD"
-  unique: true
-  also_requires_tag: "amp-state"
-  attrs: {
-    name: "async"
-    mandatory: true
-    value: ""
+  satisfies: "amp-bind extension .js script"
+  requires: "amp-state"
+  extension_spec: {
+    name: "amp-bind"
+    allowed_versions: "0.1"
+    allowed_versions: "latest"
   }
-  attrs: {
-    name: "custom-element"
-    mandatory: true
-    value: "amp-bind"
-    dispatch_key: true
-  }
-  attrs: {
-    name: "src"
-    mandatory: true
-    value_regex: "https://cdn\\.ampproject\\.org/v0/amp-bind-(latest|0\\.1).js"
-  }
-  attrs: {
-    name: "type"
-    value_casei: "text/javascript"
-  }
-  cdata: {
-    blacklisted_cdata_regex: {
-      regex: "."
-      error_message: "contents"
-    }
-  }
-  spec_url: "https://www.ampproject.org/docs/reference/extended/amp-bind.html"
+  attr_lists: "common-extension-attrs"
 }
 tags: {  # <amp-state>
   html_format: AMP
   disallowed_ancestor: "AMP-SIDEBAR"
   tag_name: "AMP-STATE"
-  mandatory_parent: "HEAD"
-  also_requires_tag: "amp-bind extension .js script"
+  satisfies: "amp-state"
+  requires: "amp-bind extension .js script"
   attrs: {
     name: "id"
     mandatory: true
   }
-  spec_url: "https://www.ampproject.org/docs/reference/extended/amp-bind.html"
+  spec_url: "https://www.ampproject.org/docs/reference/components/amp-bind"
 }
 tags: {  # <amp-state> (json)
   html_format: AMP
   tag_name: "SCRIPT"
   spec_name: "amp-bind extension .json script"
   mandatory_parent: "AMP-STATE"
+  attrs: { name: "nonce" }
   attrs: {
     name: "type"
     mandatory: true
@@ -77,5 +55,5 @@ tags: {  # <amp-state> (json)
       error_message: "html comments"
     }
   }
-  spec_url: "https://www.ampproject.org/docs/reference/extended/amp-bind.html"
+  spec_url: "https://www.ampproject.org/docs/reference/components/amp-bind"
 }

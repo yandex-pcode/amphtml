@@ -37,8 +37,10 @@ exports.rules = [
   {
     filesMatching: '**/*.js',
     mustNotDependOn: 'src/sanitizer.js',
-    whitelist: 'extensions/amp-mustache/0.1/amp-mustache.js->' +
-        'src/sanitizer.js',
+    whitelist: [
+      'extensions/amp-mustache/0.1/amp-mustache.js->src/sanitizer.js',
+      'extensions/amp-bind/0.1/bind-impl.js->src/sanitizer.js',
+    ],
   },
   {
     filesMatching: '**/*.js',
@@ -95,6 +97,7 @@ exports.rules = [
       // somewhere else at some point
       'ads/google/a4a/**->src/ad-cid.js',
       'ads/google/a4a/**->src/document-info.js',
+      'ads/google/a4a/**->src/dom.js',
       'ads/google/a4a/**->src/experiments.js',
       'ads/google/a4a/**->src/timer.js',
       'ads/google/a4a/**->src/viewer.js',
@@ -122,6 +125,8 @@ exports.rules = [
           'extensions/amp-ad-network-fake-impl/0.1/fake-a4a-config.js',
       'ads/_a4a-config.js->' +
           'extensions/amp-ad-network-triplelift-impl/0.1/triplelift-a4a-config.js',
+      'ads/_a4a-config.js->' +
+          'extensions/amp-ad-network-cloudflare-impl/0.1/cloudflare-a4a-config.js',
       'ads/google/a4a/google-data-reporter.js->' +
           'extensions/amp-ad-network-adsense-impl/0.1/adsense-a4a-config.js',
       'ads/google/a4a/google-data-reporter.js->' +
@@ -152,6 +157,10 @@ exports.rules = [
       'extensions/amp-youtube/0.1/amp-youtube.js->' +
           'src/service/video-manager-impl.js',
       'extensions/amp-a4a/0.1/amp-a4a.js->src/service/variable-source.js',
+      'extensions/amp-nexxtv-player/0.1/amp-nexxtv-player.js->' +
+          'src/service/video-manager-impl.js',
+      'extensions/amp-fx-parallax/0.1/amp-fx-parallax.js->' +
+          'src/service/parallax-impl.js',
     ],
   },
   {
@@ -170,6 +179,7 @@ exports.rules = [
       'src/polyfills.js->src/polyfills/math-sign.js',
       'src/polyfills.js->src/polyfills/object-assign.js',
       'src/polyfills.js->src/polyfills/promise.js',
+      'src/polyfills.js->src/polyfills/array-includes.js',
       'src/service/extensions-impl.js->src/polyfills/document-contains.js',
       'src/service/extensions-impl.js->src/polyfills/domtokenlist-toggle.js',
     ],

@@ -141,12 +141,14 @@ function compile(entryModuleFilenames, outputDir,
       // Strange access/login related files.
       'build/all/v0/*.js',
       // A4A has these cross extension deps.
-      'extensions/**/*-config.js',
+      'extensions/amp-ad-network*/**/*-config.js',
       'extensions/amp-ad/**/*.js',
       'extensions/amp-a4a/**/*.js',
       // Currently needed for crypto.js and visibility.js.
       // Should consider refactoring.
       'extensions/amp-analytics/**/*.js',
+      // For amp-bind in the web worker (ww.js).
+      'extensions/amp-bind/**/*.js',
       'src/*.js',
       'src/!(inabox)*/**/*.js',
       '!third_party/babel/custom-babel-helpers.js',
@@ -261,6 +263,7 @@ function compile(entryModuleFilenames, outputDir,
         jscomp_off: ['unknownDefines'],
         define: [],
         hide_warnings_for: [
+          'third_party/caja/',
           'third_party/closure-library/sha384-generated.js',
           'third_party/d3/',
           'third_party/vega/',

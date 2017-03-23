@@ -15,7 +15,6 @@
  */
 
 import '../amp-selector';
-import {toggleExperiment} from '../../../../src/experiments';
 
 describes.realWin('amp-selector', {
   win: { /* window spec */
@@ -29,14 +28,6 @@ describes.realWin('amp-selector', {
 }, env => {
   let win;
   describe('test extension', () => {
-
-    beforeEach(() => {
-      toggleExperiment(window, 'amp-selector', true);
-    });
-
-    afterEach(() => {
-      toggleExperiment(window, 'amp-selector', false);
-    });
 
     function getSelector(options) {
       win = env.win;
@@ -134,6 +125,7 @@ describes.realWin('amp-selector', {
 
       let ampSelector = getSelector({});
       let impl = ampSelector.implementation_;
+      impl.mutateElement = fn => fn();
       let setInputsSpy = sandbox.spy(impl, 'setInputs_');
       let initSpy = sandbox.spy(impl, 'init_');
       ampSelector.build();
@@ -417,6 +409,7 @@ describes.realWin('amp-selector', {
         },
       });
       let impl = ampSelector.implementation_;
+      impl.mutateElement = fn => fn();
       ampSelector.build();
       let clearSelectionSpy = sandbox.spy(impl, 'clearSelection_');
       let setSelectionSpy = sandbox.spy(impl, 'setSelection_');
@@ -459,6 +452,7 @@ describes.realWin('amp-selector', {
       });
 
       impl = ampSelector.implementation_;
+      impl.mutateElement = fn => fn();
       ampSelector.build();
       clearSelectionSpy = sandbox.spy(impl, 'clearSelection_');
       setSelectionSpy = sandbox.spy(impl, 'setSelection_');
@@ -501,6 +495,7 @@ describes.realWin('amp-selector', {
       });
 
       impl = ampSelector.implementation_;
+      impl.mutateElement = fn => fn();
       ampSelector.build();
       clearSelectionSpy = sandbox.spy(impl, 'clearSelection_');
       setSelectionSpy = sandbox.spy(impl, 'setSelection_');
@@ -534,7 +529,13 @@ describes.realWin('amp-selector', {
       expect(impl.options_[0].hasAttribute('selected')).to.be.false;
       expect(impl.options_[3].hasAttribute('selected')).to.be.true;
 
-      expect(setInputsSpy).calledOnce;
+      // Integers should be converted to strings.
+      impl.mutatedAttributesCallback({selected: 0});
+
+      expect(impl.options_[0].hasAttribute('selected')).to.be.true;
+      expect(impl.options_[3].hasAttribute('selected')).to.be.false;
+
+      expect(setInputsSpy).calledTwice;
     });
 
     it('should trigger `select` action when user selects an option', () => {
@@ -544,10 +545,10 @@ describes.realWin('amp-selector', {
           selectedCount: 2,
         },
       });
-
-      const impl = ampSelector.implementation_;
-      const triggerSpy = sandbox.spy(impl.action_, 'trigger');
       ampSelector.build();
+      const impl = ampSelector.implementation_;
+      impl.mutateElement = fn => fn();
+      const triggerSpy = sandbox.spy(impl.action_, 'trigger');
 
       impl.clickHandler_({target: impl.options_[3]});
 

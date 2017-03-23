@@ -16,6 +16,9 @@
 
 import {AstNodeType} from './bind-expr-defines';
 import {parser} from './bind-expr-impl';
+import {user} from '../../../src/log';
+
+const TAG = 'amp-bind';
 
 /**
  * Possible types of a Bind expression evaluation.
@@ -23,9 +26,12 @@ import {parser} from './bind-expr-impl';
  */
 export let BindExpressionResultDef;
 
+/** @const @private {string} */
+const BUILT_IN_FUNCTIONS = 'built-in-functions';
+
 /**
  * Map of object type to function name to whitelisted function.
- * @type {!Object<string, !Object<string, Function>>}
+ * @const @private {!Object<string, !Object<string, Function>>}
  */
 const FUNCTION_WHITELIST = (function() {
   const whitelist = {
@@ -36,6 +42,7 @@ const FUNCTION_WHITELIST = (function() {
         Array.prototype.join,
         Array.prototype.lastIndexOf,
         Array.prototype.slice,
+        Array.prototype.includes,
       ],
     '[object String]':
       [
@@ -52,6 +59,16 @@ const FUNCTION_WHITELIST = (function() {
         String.prototype.toUpperCase,
       ],
   };
+  whitelist[BUILT_IN_FUNCTIONS] = [
+    Math.abs,
+    Math.ceil,
+    Math.floor,
+    Math.max,
+    Math.min,
+    Math.random,
+    Math.round,
+    Math.sign,
+  ];
   // Creates a prototype-less map of function name to the function itself.
   // This makes function lookups faster (compared to Array.indexOf).
   const out = Object.create(null);
@@ -79,7 +96,7 @@ export class BindExpression {
     /** @const {string} */
     this.expressionString = expressionString;
 
-    /** @const {!./bind-expr-defines.AstNode} */
+    /** @const @private {!./bind-expr-defines.AstNode} */
     this.ast_ = parser.parse(this.expressionString);
   }
 
@@ -118,43 +135,70 @@ export class BindExpression {
         return this.eval_(args[0], scope);
 
       case AstNodeType.INVOCATION:
+        // Built-in functions don't have a caller object.
+        const isBuiltIn = (args[0] === null);
+
         const caller = this.eval_(args[0], scope);
         const params = this.eval_(args[1], scope);
         const method = String(value);
 
-        const callerType = Object.prototype.toString.call(caller);
-        const whitelist = FUNCTION_WHITELIST[callerType];
-        if (whitelist) {
-          const func = caller[method];
-          if (func && func === whitelist[method]) {
-            if (Array.isArray(params) && !this.containsObject_(params)) {
-              return func.apply(caller, params);
-            } else {
-              throw new Error(`Unexpected argument type in ${method}().`);
+        let validFunction;
+        let unsupportedError;
+
+        if (isBuiltIn) {
+          validFunction = FUNCTION_WHITELIST[BUILT_IN_FUNCTIONS][method];
+          if (!validFunction) {
+            unsupportedError = `${method} is not a supported function.`;
+          }
+        } else {
+          const callerType = Object.prototype.toString.call(caller);
+          const whitelist = FUNCTION_WHITELIST[callerType];
+          if (whitelist) {
+            const f = caller[method];
+            if (f && f === whitelist[method]) {
+              validFunction = f;
             }
           }
+          if (!validFunction) {
+            unsupportedError =
+                `${callerType}.${method} is not a supported function.`;
+          }
         }
-        throw new Error(`${method}() is not a supported function.`);
+
+        if (validFunction) {
+          if (Array.isArray(params) && !this.containsObject_(params)) {
+            return validFunction.apply(caller, params);
+          } else {
+            throw new Error(`Unexpected argument type in ${method}().`);
+          }
+        }
+
+        throw new Error(unsupportedError);
 
       case AstNodeType.MEMBER_ACCESS:
         const target = this.eval_(args[0], scope);
         const member = this.eval_(args[1], scope);
 
         if (target === null || member === null) {
+          this.memberAccessWarning_(target, member);
           return null;
         }
         const targetType = typeof target;
         if (targetType !== 'string' && targetType !== 'object') {
+          this.memberAccessWarning_(target, member);
           return null;
         }
         const memberType = typeof member;
         if (memberType !== 'string' && memberType !== 'number') {
+          this.memberAccessWarning_(target, member);
           return null;
         }
         // Ignore Closure's type constraint for `hasOwnProperty`.
         if (Object.prototype.hasOwnProperty.call(
               /** @type {Object} */ (target), member)) {
           return target[member];
+        } else {
+          this.memberAccessWarning_(target, member);
         }
         return null;
 
@@ -165,6 +209,8 @@ export class BindExpression {
         const variable = value;
         if (Object.prototype.hasOwnProperty.call(scope, variable)) {
           return scope[variable];
+        } else {
+          user().warn(TAG, `${variable} is not defined; returning null.`);
         }
         return null;
 
@@ -254,6 +300,16 @@ export class BindExpression {
       default:
         throw new Error(`Unexpected AstNodeType: ${type}.`);
     }
+  }
+
+  /**
+   * @param {*} target
+   * @param {*} member
+   * @private
+   */
+  memberAccessWarning_(target, member) {
+    user().warn(TAG, `Cannot read property ${JSON.stringify(member)} of ` +
+        `${JSON.stringify(target)}; returning null.`);
   }
 
   /**

@@ -21,7 +21,7 @@ process.end.NODE_ENV;
 
 // Exposed to ads.
 window.context = {};
-window.context.amp3pSentinel;
+window.context.sentinel;
 window.context.clientId;
 window.context.initialIntersection;
 window.context.sourceUrl;
@@ -103,7 +103,9 @@ data.pageHidden;
 data.changes;
 data._context;
 data.inViewport;
-
+data.numposts;
+data.orderBy;
+data.colorscheme;
 
 // 3p code
 var twttr;

@@ -17,8 +17,7 @@
 import {CSS} from '../../../build/amp-selector-0.1.css';
 import {actionServiceForDoc} from '../../../src/action';
 import {closest} from '../../../src/dom';
-import {dev, user} from '../../../src/log';
-import {isExperimentOn} from '../../../src/experiments';
+import {dev} from '../../../src/log';
 
 export class AmpSelector extends AMP.BaseElement {
   /** @param {!AmpElement} element */
@@ -40,8 +39,8 @@ export class AmpSelector extends AMP.BaseElement {
     /** @private {boolean} */
     this.isDisabled_ = false;
 
-    /** @const @private {!../../../src/service/action-impl.ActionService} */
-    this.action_ = actionServiceForDoc(this.win.document.documentElement);
+    /** @private {?../../../src/service/action-impl.ActionService} */
+    this.action_ = null;
   }
 
   /** @override */
@@ -51,8 +50,7 @@ export class AmpSelector extends AMP.BaseElement {
 
   /** @override */
   buildCallback() {
-    user().assert(isExperimentOn(this.win, 'amp-selector'),
-        `Experiment amp-selector is disabled.`);
+    this.action_ = actionServiceForDoc(this.element);
     this.isMultiple_ = this.element.hasAttribute('multiple');
     this.isDisabled_ = this.element.hasAttribute('disabled');
 
@@ -82,11 +80,11 @@ export class AmpSelector extends AMP.BaseElement {
 
   /**
    * Handles mutation of the `selected` attribute.
-   * @param {string|Array|null} newValue
+   * @param {null|boolean|string|number|Array|Object} newValue
    * @private
    */
   selectedAttributeMutated_(newValue) {
-    if (!newValue) {
+    if (newValue === null) {
       this.clearAllSelections_();
       return;
     }
@@ -95,11 +93,16 @@ export class AmpSelector extends AMP.BaseElement {
     if (!this.isMultiple_) {
       selectedArray = selectedArray.slice(0, 1);
     }
+    // Convert array values to strings and create map for fast lookup.
+    const selectedMap = selectedArray.reduce((map, value) => {
+      map[value] = true;
+      return map;
+    }, Object.create(null));
     // Iterate through elements and toggle selection as necessary.
     for (let i = 0; i < this.options_.length; i++) {
       const element = this.options_[i];
       const option = element.getAttribute('option');
-      if (selectedArray.indexOf(option) >= 0) {
+      if (selectedMap[option]) {
         this.setSelection_(element);
       } else {
         this.clearSelection_(element);
@@ -185,31 +188,34 @@ export class AmpSelector extends AMP.BaseElement {
     if (!el || el.hasAttribute('disabled')) {
       return;
     }
-    /** @type {?Array<string>} */
-    let selectedValues;
-    if (el.hasAttribute('selected')) {
-      if (this.isMultiple_) {
-        this.clearSelection_(el);
+
+    this.mutateElement(() => {
+      /** @type {?Array<string>} */
+      let selectedValues;
+      if (el.hasAttribute('selected')) {
+        if (this.isMultiple_) {
+          this.clearSelection_(el);
+          selectedValues = this.setInputs_();
+        }
+      } else {
+        this.setSelection_(el);
         selectedValues = this.setInputs_();
       }
-    } else {
-      this.setSelection_(el);
-      selectedValues = this.setInputs_();
-    }
 
-    // Don't trigger action if selected values haven't changed.
-    if (selectedValues) {
-      // Trigger 'select' event with two data params:
-      // 'targetOption' - option value of the selected or deselected element.
-      // 'selectedOptions' - array of option values of selected elements.
-      const name = 'select';
-      const detail = {
-        targetOption: el.getAttribute('option'),
-        selectedOptions: selectedValues,
-      };
-      const selectEvent = new CustomEvent(`amp-selector.${name}`, {detail});
-      this.action_.trigger(this.element, name, selectEvent);
-    }
+      // Don't trigger action if selected values haven't changed.
+      if (selectedValues) {
+        // Trigger 'select' event with two data params:
+        // 'targetOption' - option value of the selected or deselected element.
+        // 'selectedOptions' - array of option values of selected elements.
+        const name = 'select';
+        const detail = {
+          targetOption: el.getAttribute('option'),
+          selectedOptions: selectedValues,
+        };
+        const selectEvent = new CustomEvent(`amp-selector.${name}`, {detail});
+        this.action_.trigger(this.element, name, selectEvent);
+      }
+    });
   }
 
   /**

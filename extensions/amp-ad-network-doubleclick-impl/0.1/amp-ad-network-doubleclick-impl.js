@@ -28,6 +28,9 @@ import {
   extractGoogleAdCreativeAndSignature,
   googleAdUrl,
   isGoogleAdsA4AValidEnvironment,
+  AmpAnalyticsConfigDef,
+  extractAmpAnalyticsConfig,
+  injectActiveViewAmpAnalyticsElement,
 } from '../../../ads/google/a4a/utils';
 import {getMultiSizeDimensions} from '../../../ads/google/utils';
 import {
@@ -35,6 +38,7 @@ import {
   setGoogleLifecycleVarsFromHeaders,
 } from '../../../ads/google/a4a/google-data-reporter';
 import {stringHash32} from '../../../src/crypto';
+import {extensionsFor} from '../../../src/extensions';
 import {domFingerprintPlain} from '../../../src/utils/dom-fingerprint';
 
 /** @const {string} */
@@ -54,12 +58,21 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
      */
     this.lifecycleReporter_ = this.lifecycleReporter_ ||
         this.initLifecycleReporter();
+
+    /**
+     * Config to generate amp-analytics element for active view reporting.
+     * @type {?AmpAnalyticsConfigDef}
+     * @visibleForTesting
+     */
+    this.ampAnalyticsConfig = null;
+
+    /** @private {!../../../src/service/extensions-impl.Extensions} */
+    this.extensions_ = extensionsFor(this.win);
   }
 
   /** @override */
   isValidElement() {
-    return isGoogleAdsA4AValidEnvironment(this.win, this.element) &&
-        this.isAmpAdElement() &&
+    return isGoogleAdsA4AValidEnvironment(this.win) && this.isAmpAdElement() &&
         // Ensure not within remote.html iframe.
         !document.querySelector('meta[name=amp-3p-iframe-src]');
   }
@@ -70,11 +83,18 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
     // validateData, from 3p/3p/js, after noving it someplace common.
     const startTime = Date.now();
     const global = this.win;
-    const slotRect = this.getIntersectionElementLayoutBox();
-    let size = `${slotRect.width}x${slotRect.height}`;
+    const tagWidth = this.element.getAttribute('width');
+    const tagHeight = this.element.getAttribute('height');
+    let size;
+    if (tagWidth && tagHeight) {
+      size = `${tagWidth}x${tagHeight}`;
+    } else {
+      const slotRect = this.getIntersectionElementLayoutBox();
+      size = `${slotRect.width}x${slotRect.height}`;
+    }
     const rawJson = this.element.getAttribute('json');
     const jsonParameters = rawJson ? JSON.parse(rawJson) : {};
-    const tfcd = jsonParameters['tfcd'];
+    const tfcd = jsonParameters['tagForChildDirectedTreatment'];
     const adTestOn = isInManualExperiment(this.element);
 
     const multiSizeDataStr = this.element.getAttribute('data-multi-size');
@@ -103,6 +123,7 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
       {name: 'tfcd', value: tfcd == undefined ? null : tfcd},
       {name: 'u_sd', value: global.devicePixelRatio},
       {name: 'adtest', value: adTestOn},
+      {name: 'asnt', value: this.sentinel},
     ], [
       {
         name: 'scp',
@@ -129,6 +150,7 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
   /** @override */
   extractCreativeAndSignature(responseText, responseHeaders) {
     setGoogleLifecycleVarsFromHeaders(responseHeaders, this.lifecycleReporter_);
+    this.ampAnalyticsConfig = extractAmpAnalyticsConfig(responseHeaders);
     return extractGoogleAdCreativeAndSignature(responseText, responseHeaders);
   }
 
@@ -146,6 +168,7 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
     this.element.setAttribute('data-amp-slot-index',
         this.win.ampAdSlotIdCounter++);
     this.lifecycleReporter_ = this.initLifecycleReporter();
+    this.ampAnalyticsConfig = null;
   }
 
   /**
@@ -153,6 +176,13 @@ export class AmpAdNetworkDoubleclickImpl extends AmpA4A {
    */
   initLifecycleReporter() {
     return googleLifecycleReporterFactory(this);
+  }
+
+  /** @override */
+  onCreativeRender(isVerifiedAmpCreative) {
+    super.onCreativeRender(isVerifiedAmpCreative);
+    injectActiveViewAmpAnalyticsElement(
+      this, this.extensions_, this.ampAnalyticsConfig);
   }
 
   /**
@@ -179,15 +209,13 @@ AMP.registerElement(
  * @return {?string}
  */
 function serializeTargeting(targeting, categoryExclusions) {
-  if (!targeting) {
-    return null;
-  }
-  const serialized = Object.keys(targeting).map(
-      key => serializeItem(key, targeting[key]));
+  const serialized = targeting ?
+      Object.keys(targeting).map(key => serializeItem(key, targeting[key])) :
+      [];
   if (categoryExclusions) {
     serialized.push(serializeItem('excl_cat', categoryExclusions));
   }
-  return serialized.join('&');
+  return serialized.length ? serialized.join('&') : null;
 }
 
 /**

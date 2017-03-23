@@ -35,7 +35,7 @@ import {user} from './log';
  * https://developers.google.com/web/fundamentals/getting-started/primers/customelements)
  * and adding AMP style late loading to the mix.
  *
- * The complete lifecycle of custom DOM element is:
+ * The complete lifecycle of a custom DOM element is:
  *
  *           ||
  *           || createdCallback
@@ -150,6 +150,14 @@ export class BaseElement {
 
     /** @public {?Object} For use by sub classes */
     this.config = null;
+  }
+
+  /**
+   * The element's signal tracker.
+   * @return {!./utils/signals.Signals}
+   */
+  signals() {
+    return this.element.signals();
   }
 
   /**
@@ -447,6 +455,24 @@ export class BaseElement {
   }
 
   /**
+   * Whether the element needs to be reconstructed after it has been
+   * re-parented. Many elements cannot survive fully the reparenting and
+   * are better to be reconstructed from scratch.
+   *
+   * An example of an element that should be reconstructed in a iframe-based
+   * element. Reparenting such an element will cause the iframe to reload and
+   * will lost the previously established connection. It's safer to reconstruct
+   * such an element. An image or the other hand does not need to be
+   * reconstructed since image itself is not reloaded by the browser and thus
+   * there's no need to use additional resources for reconstruction.
+   *
+   * @return {boolean}
+   */
+  reconstructWhenReparented() {
+    return true;
+  }
+
+  /**
    * Instructs the element that its activation is requested based on some
    * user event. Intended to be implemented by actual components.
    * @param {!./service/action-impl.ActionInvocation} unusedInvocation
@@ -468,6 +494,7 @@ export class BaseElement {
     return loadPromise(element, opt_timeout);
   }
 
+  /** @private */
   initActionMap_() {
     if (!this.actionMap_) {
       this.actionMap_ = this.win.Object.create(null);
@@ -608,6 +635,14 @@ export class BaseElement {
   }
 
   /**
+   * An implementation can call this method to signal to the element that
+   * it has started rendering.
+   */
+  renderStarted() {
+    this.element.renderStarted();
+  }
+
+  /**
    * Returns the original nodes of the custom element without any service nodes
    * that could have been added for markup. These nodes can include Text,
    * Comment and other child nodes.
@@ -641,15 +676,9 @@ export class BaseElement {
    * @public @final
    */
   applyFillContent(element, opt_replacedContent) {
-    // TODO(dvoytenko, #6794): Remove old `-amp-fill-content` form after the new
-    // form is in PROD for 1-2 weeks.
     element.classList.add('i-amphtml-fill-content');
-    element.classList.add('-amp-fill-content');
     if (opt_replacedContent) {
-      // TODO(dvoytenko, #6794): Remove old `-amp-replaced-content` form after the new
-      // form is in PROD for 1-2 weeks.
       element.classList.add('i-amphtml-replaced-content');
-      element.classList.add('-amp-replaced-content');
     }
   }
 
@@ -662,8 +691,8 @@ export class BaseElement {
   }
 
   /**
-   * Returns the layout rectangle of the element used for reporting this
-   * element's intersection with the viewport.
+   * Returns the layout rectangle used for when calculating this element's
+   * intersection with the viewport.
    * @return {!./layout-rect.LayoutRectDef}
    */
   getIntersectionElementLayoutBox() {
@@ -742,6 +771,24 @@ export class BaseElement {
   }
 
   /**
+   * Collapses the element, setting it to `display: none`, and notifies its
+   * owner (if there is one) through {@link collapsedCallback} that the element
+   * is no longer visible.
+   */
+  collapse() {
+    this.element.getResources().collapseElement(this.element);
+  }
+
+  /**
+   * Return a promise that request the runtime to collapse one element
+   * @return {!Promise}
+   */
+  attemptCollapse() {
+    return this.element.getResources().attemptCollapse(this.element);
+  }
+
+
+  /**
    * Return a promise that requests the runtime to update
    * the height of this element to the specified value.
    * The runtime will schedule this request and attempt to process it
@@ -809,20 +856,29 @@ export class BaseElement {
   }
 
   /**
-   * Collapses the element, setting it to `display: none`, and notifies its
-   * owner (if there is one) through {@link collapsedCallback} that the element
-   * is no longer visible.
+   * Called every time an owned AmpElement collapses itself.
+   * See {@link collapse}.
+   * @param {!AmpElement} unusedElement Child element that was collapsed.
    */
-  collapse() {
-    this.element.getResources().collapseElement(this.element);
+  collapsedCallback(unusedElement) {
+    // Subclasses may override.
   }
 
   /**
-   * Called every time an owned AmpElement collapses itself.
-   * See {@link collapse}.
-   * @param {!AmpElement} unusedElement
+   * Expands the element, resetting its default display value, and notifies its
+   * owner (if there is one) through {@link expandedCallback} that the element
+   * is no longer visible.
    */
-  collapsedCallback(unusedElement) {
+  expand() {
+    this.element.getResources().expandElement(this.element);
+  }
+
+  /**
+   * Called every time an owned AmpElement expands itself.
+   * See {@link expand}.
+   * @param {!AmpElement} unusedElement Child element that was expanded.
+   */
+  expandedCallback(unusedElement) {
     // Subclasses may override.
   }
 
@@ -847,4 +903,4 @@ export class BaseElement {
    * @public
    */
   onLayoutMeasure() {}
-};
+}

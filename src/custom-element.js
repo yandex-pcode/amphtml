@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
+import {CommonSignals} from './common-signals';
 import {Layout, getLayoutClass, getLengthNumeral, getLengthUnits,
     isInternalElement, isLayoutSizeDefined, isLoadingAllowed,
     parseLayout, parseLength, getNaturalDimensions,
     hasNaturalDimensions} from './layout';
 import {ElementStub, stubbedElements} from './element-stub';
+import {Signals} from './utils/signals';
 import {ampdocServiceFor} from './ampdoc';
 import {createLoaderElement} from '../src/loader';
 import {dev, rethrowAsync, user} from './log';
@@ -58,6 +60,17 @@ const PREPARE_LOADING_THRESHOLD_ = 1000;
 
 
 /**
+ * @enum {number}
+ */
+const UpgradeState = {
+  NOT_UPGRADED: 1,
+  UPGRADED: 2,
+  UPGRADE_FAILED: 3,
+  UPGRADE_IN_PROGRESS: 4,
+};
+
+
+/**
  * Caches whether the template tag is supported to avoid memory allocations.
  * @type {boolean|undefined}
  */
@@ -74,17 +87,6 @@ function isTemplateTagSupported() {
   }
   return templateTagSupported;
 }
-
-
-/**
- * @enum {number}
- */
-const UpgradeState = {
-  NOT_UPGRADED: 1,
-  UPGRADED: 2,
-  UPGRADE_FAILED: 3,
-  UPGRADE_IN_PROGRESS: 4,
-};
 
 
 /**
@@ -532,15 +534,21 @@ function createBaseCustomElementClass(win) {
       /**
        * Action queue is initially created and kept around until the element
        * is ready to send actions directly to the implementation.
-       * @private {?Array<!./service/action-impl.ActionInvocation>}
+       * - undefined initially
+       * - array if used
+       * - null after unspun
+       * @private {?Array<!./service/action-impl.ActionInvocation>|undefined}
        */
-      this.actionQueue_ = [];
+      this.actionQueue_ = undefined;
 
       /**
        * Whether the element is in the template.
        * @private {boolean|undefined}
        */
       this.isInTemplate_ = undefined;
+
+      /** @private @const */
+      this.signals_ = new Signals();
     }
 
     /**
@@ -549,6 +557,11 @@ function createBaseCustomElementClass(win) {
      * @return {string}
      */
     elementName() {
+    }
+
+    /** @return {!Signals} */
+    signals() {
+      return this.signals_;
     }
 
     /**
@@ -659,6 +672,15 @@ function createBaseCustomElementClass(win) {
     }
 
     /**
+     * Returns the promise that's resolved when the element has been built. If
+     * the build fails, the resulting promise is rejected.
+     * @return {!Promise}
+     */
+    whenBuilt() {
+      return this.signals_.whenSignal(CommonSignals.BUILT);
+    }
+
+    /**
      * Get the priority to load the element.
      * @return {number} @this {!Element}
      */
@@ -688,7 +710,9 @@ function createBaseCustomElementClass(win) {
         this.built_ = true;
         this.classList.remove('i-amphtml-notbuilt');
         this.classList.remove('amp-notbuilt');
+        this.signals_.signal(CommonSignals.BUILT);
       } catch (e) {
+        this.signals_.rejectSignal(CommonSignals.BUILT, e);
         reportError(e, this);
         throw e;
       }
@@ -696,14 +720,10 @@ function createBaseCustomElementClass(win) {
         this.updateInViewport_(true);
       }
       if (this.actionQueue_) {
-        if (this.actionQueue_.length > 0) {
-          // Only schedule when the queue is not empty, which should be
-          // the case 99% of the time.
-          timerFor(this.ownerDocument.defaultView)
+        // Only schedule when the queue is not empty, which should be
+        // the case 99% of the time.
+        timerFor(this.ownerDocument.defaultView)
             .delay(this.dequeueActions_.bind(this), 1);
-        } else {
-          this.actionQueue_ = null;
-        }
       }
       if (!this.getPlaceholder()) {
         const placeholder = this.createPlaceholder();
@@ -752,9 +772,9 @@ function createBaseCustomElementClass(win) {
       if (this.isUpgraded()) {
         this.implementation_.layoutWidth_ = this.layoutWidth_;
       }
-      // TODO(malteubl): Forward for stubbed elements.
-      // TODO(jridgewell): We should pass the layoutBox down.
-      this.implementation_.onLayoutMeasure();
+      if (this.isBuilt()) {
+        this.implementation_.onLayoutMeasure();
+      }
 
       if (this.isLoadingEnabled_()) {
         if (this.isInViewport_) {
@@ -940,6 +960,8 @@ function createBaseCustomElementClass(win) {
         // It's important to have this flag set in the end to avoid
         // `resources.add` called twice if upgrade happens immediately.
         this.everAttached = true;
+      } else if (this.reconstructWhenReparented()) {
+        this.reset_();
       }
       this.getResources().add(this);
     }
@@ -971,7 +993,9 @@ function createBaseCustomElementClass(win) {
         this.completeUpgrade_(impl);
       } else if (typeof res.then == 'function') {
         // It's a promise: wait until it's done.
-        res.then(impl => this.completeUpgrade_(impl)).catch(reason => {
+        res.then(upgrade => {
+          this.completeUpgrade_(upgrade || impl);
+        }).catch(reason => {
           this.upgradeState_ = UpgradeState.UPGRADE_FAILED;
           rethrowAsync(reason);
         });
@@ -1124,10 +1148,17 @@ function createBaseCustomElementClass(win) {
       dev().assert(this.isBuilt(),
         'Must be built to receive viewport events');
       this.dispatchCustomEventForTesting('amp:load:start');
+      const isLoadEvent = (this.layoutCount_ == 0);  // First layout is "load".
+      if (isLoadEvent) {
+        this.signals_.signal(CommonSignals.LOAD_START);
+      }
       const promise = this.implementation_.layoutCallback();
       this.preconnect(/* onLayout */true);
       this.classList.add('i-amphtml-layout');
       return promise.then(() => {
+        if (isLoadEvent) {
+          this.signals_.signal(CommonSignals.LOAD_END);
+        }
         this.readyState = 'complete';
         this.layoutCount_++;
         this.toggleLoading_(false, /* cleanup */ true);
@@ -1136,10 +1167,16 @@ function createBaseCustomElementClass(win) {
         if (!this.isFirstLayoutCompleted_) {
           this.implementation_.firstLayoutCompleted();
           this.isFirstLayoutCompleted_ = true;
+          // TODO(dvoytenko, #7389): cleanup once amp-sticky-ad signals are
+          // in PROD.
           this.dispatchCustomEvent('amp:load:end');
         }
       }, reason => {
         // add layoutCount_ by 1 despite load fails or not
+        if (isLoadEvent) {
+          this.signals_.rejectSignal(
+              CommonSignals.LOAD_END, /** @type {!Error} */ (reason));
+        }
         this.layoutCount_++;
         this.toggleLoading_(false, /* cleanup */ true);
         throw reason;
@@ -1165,7 +1202,7 @@ function createBaseCustomElementClass(win) {
           // Set a minimum delay in case the element loads very fast or if it
           // leaves the viewport.
           timerFor(this.ownerDocument.defaultView).delay(() => {
-            if (this.layoutCount_ == 0 && this.isInViewport_) {
+            if (this.isInViewport_) {
               this.toggleLoading_(true);
             }
           }, 100);
@@ -1231,10 +1268,19 @@ function createBaseCustomElementClass(win) {
       }
       const isReLayoutNeeded = this.implementation_.unlayoutCallback();
       if (isReLayoutNeeded) {
-        this.layoutCount_ = 0;
-        this.isFirstLayoutCompleted_ = false;
+        this.reset_();
       }
       return isReLayoutNeeded;
+    }
+
+    /** @private */
+    reset_() {
+      this.layoutCount_ = 0;
+      this.isFirstLayoutCompleted_ = false;
+      this.signals_.reset(CommonSignals.RENDER_START);
+      this.signals_.reset(CommonSignals.LOAD_START);
+      this.signals_.reset(CommonSignals.LOAD_END);
+      this.signals_.reset(CommonSignals.INI_LOAD);
     }
 
     /**
@@ -1250,9 +1296,20 @@ function createBaseCustomElementClass(win) {
     }
 
     /**
+     * Whether the element needs to be reconstructed after it has been
+     * re-parented. Many elements cannot survive fully the reparenting and
+     * are better to be reconstructed from scratch.
+     *
+     * @return {boolean}
+     * @package @final @this {!Element}
+     */
+    reconstructWhenReparented() {
+      return this.implementation_.reconstructWhenReparented();
+    }
+
+    /**
      * Collapses the element, and notifies its owner (if there is one) that the
      * element is no longer present.
-     * @suppress {missingProperties}
      */
     collapse() {
       this.implementation_./*OK*/collapse();
@@ -1261,10 +1318,25 @@ function createBaseCustomElementClass(win) {
     /**
      * Called every time an owned AmpElement collapses itself.
      * @param {!AmpElement} element
-     * @suppress {missingProperties}
      */
     collapsedCallback(element) {
       this.implementation_.collapsedCallback(element);
+    }
+
+    /**
+     * Expands the element, and notifies its owner (if there is one) that the
+     * element is now present.
+     */
+    expand() {
+      this.implementation_./*OK*/expand();
+    }
+
+    /**
+     * Called every time an owned AmpElement expands itself.
+     * @param {!AmpElement} element
+     */
+    expandedCallback(element) {
+      this.implementation_.expandedCallback(element);
     }
 
     /**
@@ -1291,6 +1363,9 @@ function createBaseCustomElementClass(win) {
     enqueAction(invocation) {
       assertNotTemplate(this);
       if (!this.isBuilt()) {
+        if (this.actionQueue_ === undefined) {
+          this.actionQueue_ = [];
+        }
         dev().assert(this.actionQueue_).push(invocation);
       } else {
         this.executionAction_(invocation, false);
@@ -1420,6 +1495,16 @@ function createBaseCustomElementClass(win) {
     }
 
     /**
+     * An implementation can call this method to signal to the element that
+     * it has started rendering.
+     * @package @final @this {!Element}
+     */
+    renderStarted() {
+      this.signals_.signal(CommonSignals.RENDER_START);
+      this.toggleLoading_(false);
+    }
+
+    /**
      * Whether the loading can be shown for this element.
      * @return {boolean}
      * @private @this {!Element}
@@ -1477,6 +1562,12 @@ function createBaseCustomElementClass(win) {
      */
     toggleLoading_(state, opt_cleanup) {
       assertNotTemplate(this);
+      if (state &&
+          (this.layoutCount_ > 0 ||
+              this.signals_.get(CommonSignals.RENDER_START))) {
+        // Loading has already been canceled. Ignore.
+        return;
+      }
       this.loadingState_ = state;
       if (!state && !this.loadingContainer_) {
         return;

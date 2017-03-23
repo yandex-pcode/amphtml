@@ -16,7 +16,7 @@
 
 import {isJsonScriptTag} from '../../../src/dom';
 import {assertHttpsUrl, appendEncodedParamStringToUrl} from '../../../src/url';
-import {dev, user} from '../../../src/log';
+import {dev, rethrowAsync, user} from '../../../src/log';
 import {expandTemplate} from '../../../src/string';
 import {isArray, isObject} from '../../../src/types';
 import {hasOwn, map} from '../../../src/utils/object';
@@ -27,23 +27,25 @@ import {cryptoFor} from '../../../src/crypto';
 import {xhrFor} from '../../../src/xhr';
 import {toggle} from '../../../src/style';
 import {Activity} from './activity-impl';
-import {installCidService} from './cid-impl';
-import {installCryptoService} from './crypto-impl';
+import {Cid} from './cid-impl';
 import {
     InstrumentationService,
-    instrumentationServiceForDoc,
+    instrumentationServicePromiseForDoc,
 } from './instrumentation';
-import {ExpansionOptions, variableServiceFor} from './variables';
+import {
+  ExpansionOptions,
+  installVariableService,
+  variableServiceFor,
+} from './variables';
 import {ANALYTICS_CONFIG} from './vendors';
 
 // Register doc-service factory.
 AMP.registerServiceForDoc(
     'amp-analytics-instrumentation', InstrumentationService);
 AMP.registerServiceForDoc('activity', Activity);
+AMP.registerServiceForDoc('cid', Cid);
 
-installCidService(AMP.win);
-installCryptoService(AMP.win);
-variableServiceFor(AMP.win);
+installVariableService(AMP.win);
 
 const MAX_REPLACES = 16; // The maximum number of entries in a extraUrlParamsReplaceMap
 
@@ -94,8 +96,14 @@ export class AmpAnalytics extends AMP.BaseElement {
     /** @private {?./instrumentation.InstrumentationService} */
     this.instrumentation_ = null;
 
+    /** @private {?./instrumentation.AnalyticsGroup} */
+    this.analyticsGroup_ = null;
+
     /** @private {!./variables.VariableService} */
     this.variableService_ = variableServiceFor(this.win);
+
+    /** @private {!../../../src/service/crypto-impl.Crypto} */
+    this.cryptoService_ = cryptoFor(this.win);
   }
 
   /** @override */
@@ -135,7 +143,7 @@ export class AmpAnalytics extends AMP.BaseElement {
 
     return this.consentPromise_
         .then(this.fetchRemoteConfig_.bind(this))
-        .then(() => instrumentationServiceForDoc(this.getAmpDoc()))
+        .then(() => instrumentationServicePromiseForDoc(this.getAmpDoc()))
         .then(instrumentation => {
           this.instrumentation_ = instrumentation;
         })
@@ -144,8 +152,10 @@ export class AmpAnalytics extends AMP.BaseElement {
 
   /** @override */
   detachedCallback() {
-    // TODO(avimehta, #6543): Release all listeners and resources installed by
-    // this element.
+    if (this.analyticsGroup_) {
+      this.analyticsGroup_.dispose();
+      this.analyticsGroup_ = null;
+    }
   }
 
   /**
@@ -174,6 +184,9 @@ export class AmpAnalytics extends AMP.BaseElement {
 
     this.processExtraUrlParams_(this.config_['extraUrlParams'],
         this.config_['extraUrlParamsReplaceMap']);
+
+    this.analyticsGroup_ =
+        this.instrumentation_.createAnalyticsGroup(this.element);
 
     const promises = [];
     // Trigger callback can be synchronous. Do the registration at the end.
@@ -205,18 +218,33 @@ export class AmpAnalytics extends AMP.BaseElement {
                 trigger['selector'], expansionOptions)
               .then(selector => {
                 trigger['selector'] = selector;
-                this.instrumentation_.addListener(
-                    trigger, this.handleEvent_.bind(this, trigger),
-                    this.element);
+                this.addTriggerNoInline_(trigger);
               });
           } else {
-            this.instrumentation_.addListener(
-                trigger, this.handleEvent_.bind(this, trigger), this.element);
+            this.addTriggerNoInline_(trigger);
           }
         }));
       }
     }
     return Promise.all(promises);
+  }
+
+  /**
+   * Calls `AnalyticsGroup.addTrigger` and reports any errors. "NoInline" is
+   * to avoid inlining this method so that `try/catch` does it veto
+   * optimizations.
+   * @param {!JSONType} config
+   * @private
+   */
+  addTriggerNoInline_(config) {
+    try {
+      this.analyticsGroup_.addTrigger(
+          config, this.handleEvent_.bind(this, config));
+    } catch (e) {
+      const TAG = this.getName_();
+      const eventType = config['on'];
+      rethrowAsync(TAG, 'Failed to process trigger "' + eventType + '"', e);
+    }
   }
 
   /**
@@ -321,8 +349,15 @@ export class AmpAnalytics extends AMP.BaseElement {
     return config;
   }
 
-  /** @private */
+  /**
+   * @private
+   * @return {!JSONType}
+   */
   getInlineConfigNoInline() {
+    if (this.element.CONFIG) {
+      // If the analytics element is created by runtime, return cached config.
+      return this.element.CONFIG;
+    }
     let inlineConfig = {};
     const TAG = this.getName_();
     try {
@@ -344,7 +379,7 @@ export class AmpAnalytics extends AMP.BaseElement {
       user().error(TAG, 'Analytics config could not be ' +
           'parsed. Is it in a valid JSON format?', er);
     }
-    return inlineConfig;
+    return /** @type {!JSONType} */ (inlineConfig);
   }
 
   /**
@@ -363,6 +398,9 @@ export class AmpAnalytics extends AMP.BaseElement {
       }
       k = k[props[i]];
     }
+    // The actual property being called is controlled by vendor configs only
+    // that are approved in code reviews. User customization of the `optout`
+    // property is not allowed.
     return k();
   }
 
@@ -498,9 +536,8 @@ export class AmpAnalytics extends AMP.BaseElement {
       const keyPromise = this.variableService_.expandTemplate(
           spec['sampleOn'], this.expansionOptions_({}, trigger))
         .then(key => urlReplacementsForDoc(this.element).expandAsync(key));
-      const cryptoPromise = cryptoFor(this.win);
-      return Promise.all([keyPromise, cryptoPromise])
-          .then(results => results[1].uniform(results[0]))
+      return keyPromise
+          .then(key => this.cryptoService_.uniform(key))
           .then(digest => digest * 100 < spec['threshold']);
     }
     user()./*OK*/error(TAG, 'Invalid threshold for sampling.');
@@ -578,6 +615,13 @@ export class AmpAnalytics extends AMP.BaseElement {
     if (to === null || to === undefined) {
       to = {};
     }
+
+    // Assert that optouts are allowed only in predefined configs.
+    // The last expression adds an exception of known, safe optout function
+    // that is already being used in the wild.
+    user().assert(opt_predefinedConfig || !from || !from['optout'] ||
+        from['optout'] == '_gaUserPrefs.ioo',
+        'optout property is only available to vendor config.');
 
     for (const property in from) {
       user().assert(opt_predefinedConfig || property != 'iframePing',

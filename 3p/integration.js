@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Copyright 2015 The AMP HTML Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +35,7 @@ import {
 import {urls} from '../src/config';
 import {endsWith} from '../src/string';
 import {parseUrl, getSourceUrl, isProxyOrigin} from '../src/url';
-import {dev, initLogConstructor, user} from '../src/log';
+import {dev, initLogConstructor, setReportError, user} from '../src/log';
 import {getMode} from '../src/mode';
 
 // 3P - please keep in alphabetic order
@@ -52,14 +52,17 @@ import {adbutler} from '../ads/adbutler';
 import {adform} from '../ads/adform';
 import {adfox} from '../ads/adfox';
 import {adgeneration} from '../ads/adgeneration';
+import {adhese} from '../ads/adhese';
 import {adition} from '../ads/adition';
 import {adman} from '../ads/adman';
 import {adreactor} from '../ads/adreactor';
 import {adsense} from '../ads/google/adsense';
 import {adsnative} from '../ads/adsnative';
+import {adspeed} from '../ads/adspeed';
 import {adspirit} from '../ads/adspirit';
 import {adstir} from '../ads/adstir';
 import {adtech} from '../ads/adtech';
+import {adthrive} from '../ads/adthrive';
 import {aduptech} from '../ads/aduptech';
 import {adverline} from '../ads/adverline';
 import {adverticum} from '../ads/adverticum';
@@ -68,7 +71,9 @@ import {affiliateb} from '../ads/affiliateb';
 import {amoad} from '../ads/amoad';
 import {appnexus} from '../ads/appnexus';
 import {atomx} from '../ads/atomx';
+import {brainy} from '../ads/brainy';
 import {caajainfeed} from '../ads/caajainfeed';
+import {capirs} from '../ads/capirs';
 import {caprofitx} from '../ads/caprofitx';
 import {chargeads} from '../ads/chargeads';
 import {colombia} from '../ads/colombia';
@@ -79,6 +84,7 @@ import {distroscale} from '../ads/distroscale';
 import {ezoic} from '../ads/ezoic';
 import {dotandads} from '../ads/dotandads';
 import {doubleclick} from '../ads/google/doubleclick';
+import {eas} from '../ads/eas';
 import {eplanning} from '../ads/eplanning';
 import {f1e} from '../ads/f1e';
 import {felmat} from '../ads/felmat';
@@ -93,6 +99,7 @@ import {improvedigital} from '../ads/improvedigital';
 import {inmobi} from '../ads/inmobi';
 import {ix} from '../ads/ix';
 import {kargo} from '../ads/kargo';
+import {kiosked} from '../ads/kiosked';
 import {kixer} from '../ads/kixer';
 import {ligatus} from '../ads/ligatus';
 import {loka} from '../ads/loka';
@@ -104,6 +111,7 @@ import {mediavine} from '../ads/mediavine';
 import {meg} from '../ads/meg';
 import {microad} from '../ads/microad';
 import {mixpo} from '../ads/mixpo';
+import {mywidget} from '../ads/mywidget';
 import {nativo} from '../ads/nativo';
 import {nend} from '../ads/nend';
 import {nokta} from '../ads/nokta';
@@ -116,20 +124,25 @@ import {pubmine} from '../ads/pubmine';
 import {pulsepoint} from '../ads/pulsepoint';
 import {purch} from '../ads/purch';
 import {revcontent} from '../ads/revcontent';
+import {relap} from '../ads/relap';
 import {rubicon} from '../ads/rubicon';
 import {sharethrough} from '../ads/sharethrough';
+import {sklik} from '../ads/sklik';
+import {slimcutmedia} from '../ads/slimcutmedia';
 import {smartadserver} from '../ads/smartadserver';
 import {smartclip} from '../ads/smartclip';
 import {sortable} from '../ads/sortable';
 import {sovrn} from '../ads/sovrn';
+import {sunmedia} from '../ads/sunmedia';
+import {swoop} from '../ads/swoop';
 import {taboola} from '../ads/taboola';
 import {teads} from '../ads/teads';
 import {triplelift} from '../ads/triplelift';
+import {valuecommerce} from '../ads/valuecommerce';
 import {webediads} from '../ads/webediads';
 import {weboramaDisplay} from '../ads/weborama';
 import {widespace} from '../ads/widespace';
 import {xlift} from '../ads/xlift';
-import {xrostssp} from '../ads/xrostssp';
 import {yahoo} from '../ads/yahoo';
 import {yahoojp} from '../ads/yahoojp';
 import {yandex} from '../ads/yandex';
@@ -147,6 +160,7 @@ import {zucks} from '../ads/zucks';
 const AMP_EMBED_ALLOWED = {
   _ping_: true,
   'mantis-recommend': true,
+  mywidget: true,
   plista: true,
   smartclip: true,
   taboola: true,
@@ -156,18 +170,15 @@ const AMP_EMBED_ALLOWED = {
 // Need to cache iframeName as it will be potentially overwritten by
 // masterSelection, as per below.
 const iframeName = window.name;
-
-let data = parseFragment(location.hash);
-if (data && data._context) {
+let data = {};
+try {
+  // TODO(bradfrizzell@): Change the data structure of the attributes
+  //    to make it less terrible.
+  data = JSON.parse(iframeName).attributes;
   window.context = data._context;
-} else {
-  try {
-    // TODO(bradfrizzell@): Change the data structure of the attributes
-    //    to make it less terrible.
-    data = JSON.parse(iframeName).attributes;
-    window.context = data._context;
-  } catch (err) {
-    window.context = {};
+} catch (err) {
+  window.context = {};
+  if (!getMode().test) {
     dev().info(
         'INTEGRATION', 'Could not parse context from:', iframeName);
   }
@@ -175,6 +186,7 @@ if (data && data._context) {
 
 // This should only be invoked after window.context is set
 initLogConstructor();
+setReportError(console.error.bind(console));
 
 // Experiment toggles
 setExperimentToggles(window.context.experimentToggles);
@@ -192,14 +204,17 @@ register('adbutler', adbutler);
 register('adform', adform);
 register('adfox', adfox);
 register('adgeneration', adgeneration);
+register('adhese', adhese);
 register('adition', adition);
 register('adman', adman);
 register('adreactor', adreactor);
 register('adsense', adsense);
 register('adsnative', adsnative);
+register('adspeed', adspeed);
 register('adspirit', adspirit);
 register('adstir', adstir);
 register('adtech', adtech);
+register('adthrive', adthrive);
 register('aduptech', aduptech);
 register('adverline', adverline);
 register('adverticum', adverticum);
@@ -208,7 +223,9 @@ register('affiliateb', affiliateb);
 register('amoad', amoad);
 register('appnexus', appnexus);
 register('atomx', atomx);
+register('brainy', brainy);
 register('caajainfeed', caajainfeed);
+register('capirs', capirs);
 register('caprofitx', caprofitx);
 register('chargeads', chargeads);
 register('colombia', colombia);
@@ -218,6 +235,7 @@ register('csa', csa);
 register('distroscale', distroscale);
 register('dotandads', dotandads);
 register('doubleclick', doubleclick);
+register('eas', eas);
 register('eplanning', eplanning);
 register('ezoic', ezoic);
 register('f1e', f1e);
@@ -235,6 +253,7 @@ register('industrybrains', industrybrains);
 register('inmobi', inmobi);
 register('ix', ix);
 register('kargo', kargo);
+register('kiosked', kiosked);
 register('kixer', kixer);
 register('ligatus', ligatus);
 register('loka', loka);
@@ -247,6 +266,7 @@ register('mediavine', mediavine);
 register('meg', meg);
 register('microad', microad);
 register('mixpo', mixpo);
+register('mywidget', mywidget);
 register('nativo', nativo);
 register('nend', nend);
 register('nokta', nokta);
@@ -259,22 +279,27 @@ register('pubmine', pubmine);
 register('pulsepoint', pulsepoint);
 register('purch', purch);
 register('reddit', reddit);
+register('relap', relap);
 register('revcontent', revcontent);
 register('rubicon', rubicon);
 register('sharethrough', sharethrough);
+register('sklik', sklik);
+register('slimcutmedia', slimcutmedia);
 register('smartadserver', smartadserver);
 register('smartclip', smartclip);
 register('sortable', sortable);
 register('sovrn', sovrn);
+register('sunmedia', sunmedia);
+register('swoop', swoop);
 register('taboola', taboola);
 register('teads', teads);
 register('triplelift', triplelift);
 register('twitter', twitter);
+register('valuecommerce', valuecommerce);
 register('webediads', webediads);
 register('weborama-display', weboramaDisplay);
 register('widespace', widespace);
 register('xlift' , xlift);
-register('xrostssp', xrostssp);
 register('yahoo', yahoo);
 register('yahoojp', yahoojp);
 register('yandex', yandex);
@@ -420,6 +445,7 @@ window.draw3p = function(opt_configCallback, opt_allowed3pTypes,
     window.context.addContextToIframe = iframe => {
       iframe.name = iframeName;
     };
+    window.context.getHtml = getHtml;
     delete data._context;
     manageWin(window);
     installEmbedStateListener();
@@ -454,6 +480,30 @@ function triggerResizeRequest(width, height) {
  */
 function triggerRenderStart(opt_data) {
   nonSensitiveDataPostMessage('render-start', opt_data);
+}
+
+/**
+ * Id for getHtml postMessage.
+ * @type {!number}
+ */
+let currentMessageId = 0;
+
+/**
+ * See readme for window.context.getHtml
+ * @param {!string} selector - CSS selector of the node to take content from
+ * @param {!Array<string>} attributes - tag attributes to be left in the stringified HTML
+ * @param {!Function} callback
+ */
+function getHtml(selector, attributes, callback) {
+  const messageId = currentMessageId++;
+  nonSensitiveDataPostMessage('get-html', {selector, attributes, messageId});
+
+  const unlisten = listenParent(window, 'get-html-result', data => {
+    if (data.messageId === messageId) {
+      callback(data.content);
+      unlisten();
+    }
+  });
 }
 
 /**

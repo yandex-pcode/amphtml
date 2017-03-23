@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
+import {AdTracker, getExistingAds} from './ad-tracker';
 import {AdStrategy} from './ad-strategy';
 import {dev, user} from '../../../src/log';
 import {xhrFor} from '../../../src/xhr';
 import {getAdNetworkConfig} from './ad-network-config';
 import {isExperimentOn} from '../../../src/experiments';
+import {getAttributesFromConfigObj} from './attributes';
 import {getPlacementsFromConfigObj} from './placement';
 
 /** @const */
 const TAG = 'amp-auto-ads';
+
 
 export class AmpAutoAds extends AMP.BaseElement {
 
@@ -38,8 +41,11 @@ export class AmpAutoAds extends AMP.BaseElement {
 
     this.getConfig_(adNetwork.getConfigUrl()).then(configObj => {
       const placements = getPlacementsFromConfigObj(this.win, configObj);
-      new AdStrategy(type, placements, adNetwork.getDataAttributes())
-          .run();
+      const attributes = Object.assign(adNetwork.getAttributes(),
+          getAttributesFromConfigObj(configObj));
+      const adTracker =
+          new AdTracker(getExistingAds(this.win), adNetwork.getAdConstraints());
+      new AdStrategy(placements, attributes, adTracker).run();
     });
   }
 

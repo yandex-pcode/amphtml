@@ -25,6 +25,8 @@ import {numeric} from '../../../src/transition';
 import {platformFor} from '../../../src/platform';
 import {timerFor} from '../../../src/timer';
 import {triggerAnalyticsEvent} from '../../../src/analytics';
+import {isExperimentOn} from '../../../src/experiments';
+import {startsWith} from '../../../src/string';
 
 /** @const {string} */
 const SHOWN_CSS_CLASS = '-amp-slide-item-show';
@@ -84,8 +86,17 @@ export class AmpSlideScroll extends BaseSlides {
      */
     this.elasticScrollState_ = 0;
 
-    /** @private {?number} */
+    /**
+     * If not laid out yet, null. Otherwise, index of current displayed slide.
+     * @private {?number}
+     */
     this.slideIndex_ = null;
+
+    /**
+     * The slide index that should be shown on first layout.
+     * @private {number}
+     */
+    this.initialSlideIndex_ = 0;
 
     /** @private {number} */
     this.slideWidth_ = 0;
@@ -101,8 +112,13 @@ export class AmpSlideScroll extends BaseSlides {
     /** @private @const {boolean} */
     this.isIos_ = platform.isIos();
 
-    /** @const @private {!../../../src/service/action-impl.ActionService} */
-    this.action_ = actionServiceForDoc(this.win.document.documentElement);
+    /** @private {?../../../src/service/action-impl.ActionService} */
+    this.action_ = null;
+
+    /** @private {boolean} */
+    this.shouldDisableCssSnap_ = isExperimentOn(this.win,
+        'slidescroll-disable-css-snap') &&
+        startsWith(platformFor(this.win).getIosVersionString(), '10.3');
   }
 
   /** @override */
@@ -113,9 +129,16 @@ export class AmpSlideScroll extends BaseSlides {
   /** @override */
   buildSlides() {
     this.vsync_ = this.getVsync();
+    this.action_ = actionServiceForDoc(this.element);
 
     this.hasNativeSnapPoints_ = (
         getStyle(this.element, 'scrollSnapType') != undefined);
+
+    // Snap point is buggy in IOS 10.3 (beta), so it is disabled in beta.
+    if (this.shouldDisableCssSnap_) {
+      this.hasNativeSnapPoints_ = false;
+    }
+
     this.element.classList.add('-amp-slidescroll');
 
     this.slides_ = this.getRealChildren();
@@ -128,6 +151,11 @@ export class AmpSlideScroll extends BaseSlides {
     // to it (such after pressing next) should be announced to the
     // user.
     this.slidesContainer_.setAttribute('aria-live', 'polite');
+
+    // Snap point is buggy in IOS 10.3 (beta), so it is disabled in beta.
+    if (this.shouldDisableCssSnap_) {
+      this.slidesContainer_.classList.add('-amp-slidescroll-no-snap');
+    }
 
     // Workaround - https://bugs.webkit.org/show_bug.cgi?id=158821
     if (this.hasNativeSnapPoints_) {
@@ -148,6 +176,12 @@ export class AmpSlideScroll extends BaseSlides {
       slide.classList.add('amp-carousel-slide');
       slideWrapper.appendChild(slide);
       slideWrapper.classList.add('-amp-slide-item');
+
+      // Snap point is buggy in IOS 10.3 (beta), so it is disabled in beta.
+      if (this.shouldDisableCssSnap_) {
+        slideWrapper.classList.add('-amp-slidescroll-no-snap');
+      }
+
       this.slidesContainer_.appendChild(slideWrapper);
       this.slideWrappers_.push(slideWrapper);
     });
@@ -160,7 +194,7 @@ export class AmpSlideScroll extends BaseSlides {
         'scroll', this.scrollHandler_.bind(this));
 
     this.slidesContainer_.addEventListener(
-          'touchmove', this.touchMoveHandler_.bind(this));
+        'touchmove', this.touchMoveHandler_.bind(this));
 
     if (this.hasNativeSnapPoints_) {
       this.slidesContainer_.addEventListener(
@@ -169,14 +203,8 @@ export class AmpSlideScroll extends BaseSlides {
 
     this.registerAction('goToSlide', invocation => {
       const args = invocation.args;
-      if (!args) {
-        return;
-      }
-      const newIndex = Number(args['index']);
-      if (isFinite(newIndex)) {
-        this.showSlide_(newIndex);
-      } else {
-        user().warn(TAG, 'Invalid [slide] value: %s', newIndex);
+      if (args) {
+        this.showSlideWhenReady_(args['index']);
       }
     });
   }
@@ -189,13 +217,8 @@ export class AmpSlideScroll extends BaseSlides {
   /** @override */
   mutatedAttributesCallback(mutations) {
     const slide = mutations['slide'];
-    if (slide) {
-      const index = parseInt(slide, 10);
-      if (isFinite(index)) {
-        this.showSlide_(index);
-      } else {
-        user().warn(TAG, 'Invalid [slide] value: %s', slide);
-      }
+    if (slide !== undefined) {
+      this.showSlideWhenReady_(slide);
     }
   }
 
@@ -251,7 +274,7 @@ export class AmpSlideScroll extends BaseSlides {
   /** @override */
   layoutCallback() {
     if (this.slideIndex_ === null) {
-      this.showSlide_(0);
+      this.showSlide_(this.initialSlideIndex_);
     }
     return Promise.resolve();
   }
@@ -309,7 +332,7 @@ export class AmpSlideScroll extends BaseSlides {
     }
 
     const currentScrollLeft = this.slidesContainer_./*OK*/scrollLeft;
-    if (!this.hasNativeSnapPoints_) {
+    if (!this.isIos_) {
       this.handleCustomElasticScroll_(currentScrollLeft);
     }
 
@@ -345,7 +368,7 @@ export class AmpSlideScroll extends BaseSlides {
         this.elasticScrollState_ = 0;
       });
     } else if (this.elasticScrollState_ == 1 &&
-          currentScrollLeft <= this.previousScrollLeft_) {
+        currentScrollLeft <= this.previousScrollLeft_) {
       // Elastic Scroll is reversing direction take control.
       this.customSnap_(currentScrollLeft).then(() => {
         this.elasticScrollState_ = 0;
@@ -383,7 +406,7 @@ export class AmpSlideScroll extends BaseSlides {
       // Snap and stay.
       toScrollLeft = hasPrev ? this.slideWidth_ : 0;
     } else if (diff == 1 ||
-          (diff != -1 && diff == -1 * (this.noOfSlides_ - 1))) {
+        (diff != -1 && diff == -1 * (this.noOfSlides_ - 1))) {
       // Move fwd.
       toScrollLeft = hasPrev ? this.slideWidth_ * 2 : this.slideWidth_;
     } else if (diff == -1 || diff == this.noOfSlides_ - 1) {
@@ -462,16 +485,37 @@ export class AmpSlideScroll extends BaseSlides {
   }
 
   /**
+   * Parses given value as integer and shows the slide with that index value
+   * when element has been laid out.
+   * @param {*} value
+   * @private
+   */
+  showSlideWhenReady_(value) {
+    const index = parseInt(value, 10);
+    if (isFinite(index)) {
+      // If we haven't been laid out yet, set `initialSlideIndex_` instead.
+      if (this.slideIndex_ === null) {
+        this.initialSlideIndex_ = index;
+      } else {
+        this.showSlide_(index);
+      }
+    } else {
+      user().warn(TAG, 'Invalid [slide] value: %s', value);
+    }
+  }
+
+  /**
    * Makes the slide corresponding to the given index and the slides surrounding
-   *    it available for display.
+   *     it available for display.
+   * @note Element must be laid out.
    * @param {number} newIndex Index of the slide to be displayed.
    * @private
    */
   showSlide_(newIndex) {
     const noOfSlides_ = this.noOfSlides_;
     if (newIndex < 0 ||
-      newIndex >= noOfSlides_ ||
-      this.slideIndex_ == newIndex) {
+        newIndex >= noOfSlides_ ||
+        this.slideIndex_ == newIndex) {
       return;
     }
     const prevIndex = (newIndex - 1 >= 0) ? newIndex - 1 :
@@ -515,14 +559,14 @@ export class AmpSlideScroll extends BaseSlides {
   }
 
   /**
-   * Shows the slide at the given index and triggers a `goToSlide` action.
+   * Shows the slide at the given index and triggers a `slideChange` event.
    * @param {number} newIndex
    * @private
    */
   showSlideAndTriggerAction_(newIndex) {
     this.showSlide_(newIndex);
 
-    const name = 'goToSlide';
+    const name = 'slideChange';
     const detail = {index: newIndex};
     const event = new CustomEvent(`slidescroll.${name}`, {detail});
     this.action_.trigger(this.element, name, event);

@@ -34,6 +34,16 @@ import {setStyle} from '../../../src/style';
 /** @const {string} */
 const TAG_ = 'amp-iframe';
 
+/** @const {!Array<string>} */
+const ATTRIBUTES_TO_PROPAGATE = [
+  'allowfullscreen',
+  'allowpaymentrequest',
+  'allowtransparency',
+  'frameborder',
+  'referrerpolicy',
+  'scrolling',
+];
+
 /** @type {number}  */
 let count = 0;
 
@@ -310,10 +320,7 @@ export class AmpIframe extends AMP.BaseElement {
       setStyle(iframe, 'zIndex', -1);
     }
 
-    this.propagateAttributes(
-        ['frameborder', 'allowfullscreen', 'allowtransparency',
-         'scrolling', 'referrerpolicy'],
-         iframe);
+    this.propagateAttributes(ATTRIBUTES_TO_PROPAGATE, iframe);
     setSandbox(this.element, iframe, this.sandbox_);
     iframe.src = this.iframeSrc;
 
@@ -407,6 +414,18 @@ export class AmpIframe extends AMP.BaseElement {
       return 1;
     }
     return super.getPriority();
+  }
+
+  /** @override */
+  mutatedAttributesCallback(mutations) {
+    const src = mutations['src'];
+    if (src !== undefined) {
+      this.iframeSrc = this.transformSrc_(src);
+      if (this.iframe_) {
+        this.iframe_.src = this.assertSource(
+            this.iframeSrc, window.location.href, this.sandbox_);
+      }
+    }
   }
 
   /**
