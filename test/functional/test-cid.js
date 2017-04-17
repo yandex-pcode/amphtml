@@ -14,17 +14,22 @@
  * limitations under the License.
  */
 
-import {cidForDoc} from '../../src/cid';
+import {ampdocServiceFor} from '../../src/ampdoc';
+import {
+  cidForDoc,
+  extensionsFor,
+  timerFor,
+  viewerForDoc,
+} from '../../src/services';
 import {
   cidServiceForDocForTesting,
   getProxySourceOrigin,
   viewerBaseCid,
 } from '../../extensions/amp-analytics/0.1/cid-impl';
-import {installCryptoService, Crypto,}
-    from '../../src/service/crypto-impl';
+import {installCryptoService, Crypto} from '../../src/service/crypto-impl';
+import {cryptoFor} from '../../src/crypto';
 import {installDocService} from '../../src/service/ampdoc-impl';
 import {parseUrl} from '../../src/url';
-import {timerFor} from '../../src/timer';
 import {installPlatformService} from '../../src/service/platform-impl';
 import {installViewerServiceForDoc} from '../../src/service/viewer-impl';
 import {installTimerService} from '../../src/service/timer-impl';
@@ -34,7 +39,6 @@ import {
 import {
   installExtensionsService,
 } from '../../src/service/extensions-impl';
-import {extensionsFor} from '../../src/extensions';
 import * as sinon from 'sinon';
 
 const DAY = 24 * 3600 * 1000;
@@ -98,8 +102,8 @@ describe('cid', () => {
       setTimeout: window.setTimeout,
     };
     fakeWin.document.defaultView = fakeWin;
-    const ampdocService = installDocService(fakeWin, /* isSingleDoc */ true);
-    ampdoc = ampdocService.getAmpDoc();
+    installDocService(fakeWin, /* isSingleDoc */ true);
+    ampdoc = ampdocServiceFor(fakeWin).getAmpDoc();
     installTimerService(fakeWin);
     installPlatformService(fakeWin);
 
@@ -112,7 +116,8 @@ describe('cid', () => {
       return Promise.resolve();
     });
 
-    viewer = installViewerServiceForDoc(ampdoc);
+    installViewerServiceForDoc(ampdoc);
+    viewer = viewerForDoc(ampdoc);
     sandbox.stub(viewer, 'whenFirstVisible', function() {
       return whenFirstVisible;
     });
@@ -132,20 +137,16 @@ describe('cid', () => {
           return Promise.resolve(viewerStorage || undefined);
         });
 
-    return Promise
-        .all([cidServiceForDocForTesting(ampdoc),
-              installCryptoService(fakeWin)])
-        .then(results => {
-          cid = results[0];
-          crypto = results[1];
-          crypto.sha384Base64 = val => {
-            if (val instanceof Uint8Array) {
-              val = '[' + Array.apply([], val).join(',') + ']';
-            }
+    cid = cidServiceForDocForTesting(ampdoc);
+    installCryptoService(fakeWin);
+    crypto = cryptoFor(fakeWin);
+    crypto.sha384Base64 = val => {
+      if (val instanceof Uint8Array) {
+        val = '[' + Array.apply([], val).join(',') + ']';
+      }
 
-            return Promise.resolve('sha384(' + val + ')');
-          };
-        });
+      return Promise.resolve('sha384(' + val + ')');
+    };
   });
 
   afterEach(() => {
@@ -343,9 +344,8 @@ describe('cid', () => {
       navigator: window.navigator,
       services: {},
     };
-
-    const ampdocService = installDocService(win, /* isSingleDoc */ true);
-    const ampdoc2 = ampdocService.getAmpDoc();
+    installDocService(win, /* isSingleDoc */ true);
+    const ampdoc2 = ampdocServiceFor(win).getAmpDoc();
     expect(win.location.href).to.equal('https://cdn.ampproject.org/v/www.origin.com/');
     installTimerService(win);
     installPlatformService(win);

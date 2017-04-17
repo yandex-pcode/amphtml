@@ -40,6 +40,11 @@ export const adConfig = {
     renderStartImplemented: true,
   },
 
+  a8: {
+    prefetch: 'https://statics.a8.net/amp/ad.js',
+    renderStartImplemented: true,
+  },
+
   a9: {
     prefetch: 'https://c.amazon-adsystem.com/aax2/assoc.js',
   },
@@ -446,6 +451,14 @@ export const adConfig = {
       'https://tpc.googlesyndication.com',
     ],
     renderStartImplemented: true,
+  },
+
+  outbrain: {
+    renderStartImplemented: true,
+    prefetch: 'https://widgets.outbrain.com/widgetAMP/outbrainAMP.min.js',
+    preconnect: [
+      'https://odb.outbrain.com',
+    ],
   },
 
   plista: {},

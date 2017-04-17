@@ -22,7 +22,7 @@ import {
   startupChunk,
 } from '../../src/chunk';
 import {installDocService} from '../../src/service/ampdoc-impl';
-import {viewerForDoc, viewerPromiseForDoc} from '../../src/viewer';
+import {viewerForDoc, viewerPromiseForDoc} from '../../src/services';
 import * as sinon from 'sinon';
 
 
@@ -90,7 +90,7 @@ describe('chunk', () => {
   }, env => {
 
     beforeEach(() => {
-      installDocService(env.win, true);
+      installDocService(env.win, /* isSingleDoc */ true);
       expect(env.win.services.viewer).to.be.undefined;
       env.win.document.hidden = false;
     });
@@ -103,7 +103,7 @@ describe('chunk', () => {
   }, env => {
 
     beforeEach(() => {
-      installDocService(env.win, true);
+      installDocService(env.win, /* isSingleDoc */ true);
       expect(env.win.services.viewer).to.be.undefined;
       env.win.document.hidden = true;
       env.win.requestIdleCallback = function() {

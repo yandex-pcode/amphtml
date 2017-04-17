@@ -25,9 +25,9 @@ import {
   listenForOncePromise,
   postMessageToWindows,
 } from '../../../src/iframe-helper';
-import {viewerForDoc} from '../../../src/viewer';
+import {viewerForDoc} from '../../../src/services';
 import {dev} from '../../../src/log';
-import {timerFor} from '../../../src/timer';
+import {timerFor} from '../../../src/services';
 import {setStyle} from '../../../src/style';
 import {loadPromise} from '../../../src/event-helper';
 import {getHtml} from '../../../src/get-html';
@@ -302,6 +302,10 @@ export class AmpAdXOriginIframeHandler {
    */
   handleResize_(height, width, source, origin) {
     this.baseInstance_.getVsync().mutate(() => {
+      if (!this.iframe) {
+        // iframe can be cleanup before vsync.
+        return;
+      }
       const iframeHeight = this.iframe./*OK*/offsetHeight;
       const iframeWidth = this.iframe./*OK*/offsetWidth;
       this.uiHandler_.updateSize(height, width, iframeHeight,

@@ -15,9 +15,10 @@
  */
 
 import {Observable} from '../../src/observable';
+import {ampdocServiceFor} from '../../src/ampdoc';
 import {createIframePromise} from '../../testing/iframe';
 import {user} from '../../src/log';
-import {urlReplacementsForDoc} from '../../src/url-replacements';
+import {urlReplacementsForDoc} from '../../src/services';
 import {
   markElementScheduledForTesting,
   resetScheduledElementForTesting,
@@ -33,11 +34,12 @@ import {
 } from '../../extensions/amp-analytics/0.1/activity-impl';
 import {
   installUrlReplacementsServiceForDoc,
+  extractClientIdFromGaCookie,
 } from '../../src/service/url-replacements-impl';
 import {getService} from '../../src/service';
 import {setCookie} from '../../src/cookies';
 import {parseUrl} from '../../src/url';
-import {viewerForDoc} from '../../src/viewer';
+import {viewerForDoc} from '../../src/services';
 import * as trackPromise from '../../src/impression';
 
 
@@ -143,8 +145,8 @@ describes.sandboxed('UrlReplacements', {}, () => {
       },
     };
     win.document.defaultView = win;
-    const ampdocService = installDocService(win, true);
-    const ampdoc = ampdocService.getAmpDoc(win.document);
+    installDocService(win, /* isSingleDoc */ true);
+    const ampdoc = ampdocServiceFor(win).getAmpDoc();
     installDocumentInfoServiceForDoc(ampdoc);
     win.ampdoc = ampdoc;
     return win;
@@ -936,7 +938,8 @@ describes.sandboxed('UrlReplacements', {}, () => {
         iframe.doc.head.appendChild(link);
 
         const replacements = urlReplacementsForDoc(iframe.ampdoc);
-        replacements.getVariableSource().getAccessService_ = () => {
+        replacements.getVariableSource().getAccessService_ = ampdoc => {
+          expect(ampdoc.isSingleDoc).to.be.function;
           if (opt_disabled) {
             return Promise.resolve(null);
           }
@@ -1188,6 +1191,34 @@ describes.sandboxed('UrlReplacements', {}, () => {
             expect(input.value).to.match(/(\d+(\.\d+)?)/);
             expect(expandedValue).to.match(/(\d+(\.\d+)?)/);
           });
+    });
+  });
+
+  describe('extractClientIdFromGaCookie', () => {
+    it('should extract correct Client ID', () => {
+      expect(extractClientIdFromGaCookie('GA1.2.430749005.1489527047'))
+          .to.equal('430749005.1489527047');
+      expect(extractClientIdFromGaCookie('GA1.12.430749005.1489527047'))
+          .to.equal('430749005.1489527047');
+      expect(extractClientIdFromGaCookie('GA1.1-2.430749005.1489527047'))
+          .to.equal('430749005.1489527047');
+      expect(extractClientIdFromGaCookie('1.1.430749005.1489527047'))
+          .to.equal('430749005.1489527047');
+      expect(extractClientIdFromGaCookie(
+          'GA1.3.amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL'))
+          .to.equal('amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL');
+      expect(extractClientIdFromGaCookie(
+          '1.3.amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL'))
+          .to.equal('amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL');
+      expect(extractClientIdFromGaCookie(
+          'amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL'))
+          .to.equal('amp-JTHCVn-4iMhzv5oEIZIspaXUSnEF0PwNVoxs' +
+          'NDrFP4BtPQJMyxE4jb9FDlp37OJL');
     });
   });
 });

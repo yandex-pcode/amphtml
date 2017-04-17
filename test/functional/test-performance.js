@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
+import {getMode} from '../../src/mode';
 import {
   installPerformanceService,
   performanceFor,
 } from '../../src/service/performance-impl';
-import {resourcesForDoc} from '../../src/resources';
-import {viewerForDoc} from '../../src/viewer';
+import {resourcesForDoc} from '../../src/services';
+import {viewerForDoc} from '../../src/services';
 import * as lolex from 'lolex';
-import {getMode} from '../../src/mode';
+import * as sinon from 'sinon';
+
 
 describes.realWin('performance', {amp: true}, env => {
   let sandbox;
@@ -59,6 +61,37 @@ describes.realWin('performance', {amp: true}, env => {
           .to.be.jsonEqual({
             label: 'test',
             delta: 99,
+          });
+    });
+
+    it('should map tickDelta to non-zero tick', () => {
+      let c = 0;
+      expect(perf.events_.length).to.equal(c);
+
+      perf.tickDelta('test1', 0);
+      expect(perf.events_.length).to.equal(c + 1);
+      expect(perf.events_[c])
+          .to.be.jsonEqual({
+            label: 'test1',
+            delta: 1,
+          });
+
+      c++;
+      perf.tickDelta('test2', -1);
+      expect(perf.events_.length).to.equal(c + 1);
+      expect(perf.events_[c])
+          .to.be.jsonEqual({
+            label: 'test2',
+            delta: 1,
+          });
+
+      c++;
+      perf.tickDelta('test3', 2);
+      expect(perf.events_.length).to.equal(c + 1);
+      expect(perf.events_[c])
+          .to.be.jsonEqual({
+            label: 'test3',
+            delta: 2,
           });
     });
 
@@ -183,8 +216,18 @@ describes.realWin('performance', {amp: true}, env => {
         expect(flushSpy).to.have.callCount(1);
         expect(perf.events_.length).to.equal(2);
 
+        perf.isPerformanceTrackingOn_ = true;
+        clock.tick(1);
         return promise.then(() => {
           expect(perf.isMessagingReady_).to.be.true;
+          const msrCalls = viewerSendMessageStub.withArgs(
+              'tick',
+              sinon.match(arg => arg.label == 'msr'));
+          expect(msrCalls).to.be.calledOnce;
+          expect(msrCalls.args[0][1]).to.be.jsonEqual({
+            label: 'msr',
+            delta: 1,
+          });
           expect(flushSpy).to.have.callCount(4);
           expect(perf.events_.length).to.equal(0);
         });
@@ -334,10 +377,15 @@ describes.realWin('performance', {amp: true}, env => {
         return perf.coreServicesAvailable().then(() => {
           expect(viewerSendMessageStub.withArgs('tick').getCall(0).args[1])
               .to.be.jsonEqual({
+                label: 'msr',
+                delta: 1,
+              });
+          expect(viewerSendMessageStub.withArgs('tick').getCall(1).args[1])
+              .to.be.jsonEqual({
                 label: 'start0',
                 value: 0,
               });
-          expect(viewerSendMessageStub.withArgs('tick').getCall(1).args[1])
+          expect(viewerSendMessageStub.withArgs('tick').getCall(2).args[1])
               .to.be.jsonEqual({
                 label: 'start1',
                 value: 1,
@@ -362,12 +410,14 @@ describes.realWin('performance', {amp: true}, env => {
           perf.tick('start0');
           perf.tick('start1', 300);
 
-          expect(viewerSendMessageStub.withArgs('tick').getCall(2).args[1])
+          expect(viewerSendMessageStub.withArgs(
+              'tick', sinon.match(arg => arg.label == 'start0')).args[0][1])
               .to.be.jsonEqual({
                 label: 'start0',
                 value: 100,
               });
-          expect(viewerSendMessageStub.withArgs('tick').getCall(3).args[1])
+          expect(viewerSendMessageStub.withArgs(
+              'tick', sinon.match(arg => arg.label == 'start1')).args[0][1])
               .to.be.jsonEqual({
                 label: 'start1',
                 delta: 300,
@@ -396,9 +446,7 @@ describes.realWin('performance', {amp: true}, env => {
     });
   });
 
-  // TODO(dvoytenko, #7815): re-enable once the reporting regression is
-  // confirmed.
-  it.skip('should wait for visible resources', () => {
+  it('should wait for visible resources', () => {
     function resource() {
       const res = {
         loadedComplete: false,
@@ -468,10 +516,6 @@ describes.realWin('performance', {amp: true}, env => {
 
       sandbox.stub(viewer, 'whenFirstVisible')
           .returns(whenFirstVisiblePromise);
-      // TODO(dvoytenko, #7815): switch back to the non-legacy version once the
-      // reporting regression is confirmed.
-      sandbox.stub(perf, 'whenViewportLayoutCompleteLegacy_')
-          .returns(whenViewportLayoutCompletePromise);
       sandbox.stub(perf, 'whenViewportLayoutComplete_')
           .returns(whenViewportLayoutCompletePromise);
       return viewer.whenMessagingReady();
@@ -519,16 +563,16 @@ describes.realWin('performance', {amp: true}, env => {
          'to be visible before before first viewport completion', () => {
         clock.tick(100);
         whenFirstVisibleResolve();
-        expect(tickSpy).to.have.callCount(1);
+        expect(tickSpy).to.have.callCount(2);
         return viewer.whenFirstVisible().then(() => {
           clock.tick(400);
-          expect(tickSpy).to.have.callCount(2);
+          expect(tickSpy).to.have.callCount(3);
           whenViewportLayoutCompleteResolve();
           return perf.whenViewportLayoutComplete_().then(() => {
-            expect(tickSpy).to.have.callCount(3);
-            expect(tickSpy.getCall(1).args[0]).to.equal('ofv');
-            expect(tickSpy.getCall(2).args[0]).to.equal('pc');
-            expect(Number(tickSpy.getCall(2).args[1])).to.equal(400);
+            expect(tickSpy).to.have.callCount(4);
+            expect(tickSpy.withArgs('ofv')).to.be.calledOnce;
+            expect(tickSpy.withArgs('pc')).to.be.calledOnce;
+            expect(Number(tickSpy.withArgs('pc').args[0][1])).to.equal(400);
           });
         });
       });
@@ -538,10 +582,9 @@ describes.realWin('performance', {amp: true}, env => {
         clock.tick(300);
         whenViewportLayoutCompleteResolve();
         return perf.whenViewportLayoutComplete_().then(() => {
-          expect(tickSpy).to.have.callCount(2);
-          expect(tickSpy.firstCall.args[0]).to.equal('ol');
-          expect(tickSpy.secondCall.args[0]).to.equal('pc');
-          expect(Number(tickSpy.secondCall.args[1])).to.equal(1);
+          expect(tickSpy.withArgs('ol')).to.be.calledOnce;
+          expect(tickSpy.withArgs('pc')).to.be.calledOnce;
+          expect(Number(tickSpy.withArgs('pc').args[0][1])).to.equal(0);
         });
       });
     });
@@ -569,10 +612,9 @@ describes.realWin('performance', {amp: true}, env => {
         clock.tick(300);
         whenViewportLayoutCompleteResolve();
         return perf.whenViewportLayoutComplete_().then(() => {
-          expect(tickSpy).to.have.callCount(2);
-          expect(tickSpy.firstCall.args[0]).to.equal('ol');
-          expect(tickSpy.secondCall.args[0]).to.equal('pc');
-          expect(tickSpy.secondCall.args[2]).to.be.undefined;
+          expect(tickSpy.withArgs('ol')).to.be.calledOnce;
+          expect(tickSpy.withArgs('pc')).to.be.calledOnce;
+          expect(tickSpy.withArgs('pc').args[0][2]).to.be.undefined;
         });
       });
     });

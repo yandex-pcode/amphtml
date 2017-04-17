@@ -16,7 +16,7 @@
 
 import '../../../amp-carousel/0.1/amp-carousel';
 import {createFixtureIframe} from '../../../../testing/iframe';
-import {bindForDoc} from '../../../../src/bind';
+import {bindForDoc} from '../../../../src/services';
 import {ampdocServiceFor} from '../../../../src/ampdoc';
 
 describe.configure().retryOnSaucelabs().run('amp-bind', function() {
@@ -67,14 +67,20 @@ describe.configure().retryOnSaucelabs().run('amp-bind', function() {
 
   describe('detecting bindings under dynamic tags', () => {
     it('should NOT bind blacklisted attributes', () => {
-      const template = fixture.doc.getElementById('dynamicTemplate');
+      const dynamicTag = fixture.doc.getElementById('dynamicTag');
       const div = fixture.doc.createElement('div');
       div.innerHTML = '<p [onclick]="javascript:alert(document.cookie)" ' +
                          '[onmouseover]="javascript:alert()" ' +
                          '[style]="background=color:black"></p>';
       const textElement = div.firstElementChild;
-      template.parentElement.appendChild(textElement);
+      // for amp-live-list, dynamic element is <div items>, which is a child
+      // of the list.
+      dynamicTag.firstElementChild.appendChild(textElement);
       return waitForAllMutations().then(() => {
+        // Force bind to apply bindings
+        fixture.doc.getElementById('triggerBindApplicationButton').click();
+        return waitForBindApplication();
+      }).then(() => {
         expect(textElement.getAttribute('onclick')).to.be.null;
         expect(textElement.getAttribute('onmouseover')).to.be.null;
         expect(textElement.getAttribute('style')).to.be.null;
@@ -85,9 +91,13 @@ describe.configure().retryOnSaucelabs().run('amp-bind', function() {
       const div = fixture.doc.createElement('div');
       div.innerHTML = '<a [href]="javascript:alert(1)"></a>';
       const aElement = div.firstElementChild;
-      const template = fixture.doc.getElementById('dynamicTemplate');
-      template.parentElement.appendChild(aElement);
+      const dynamicTag = fixture.doc.getElementById('dynamicTag');
+      dynamicTag.firstElementChild.appendChild(aElement);
       return waitForAllMutations().then(() => {
+        // Force bind to apply bindings
+        fixture.doc.getElementById('triggerBindApplicationButton').click();
+        return waitForBindApplication();
+      }).then(() => {
         expect(aElement.getAttribute('href')).to.be.null;
       });
     });
@@ -111,6 +121,41 @@ describe.configure().retryOnSaucelabs().run('amp-bind', function() {
       button.click();
       return waitForBindApplication().then(() => {
         expect(textElement.className).to.equal('new');
+      });
+    });
+  });
+
+  describe('input integration', () => {
+    it('should update dependent bindings on range input changes', () => {
+      const rangeText = fixture.doc.getElementById('rangeText');
+      const range = fixture.doc.getElementById('range');
+      expect(rangeText.textContent).to.equal('Unbound');
+      // Calling #click() the range will not generate a change event
+      // so it must be generated manually.
+      range.value = 47;
+      range.dispatchEvent(new Event('change', {bubbles: true}));
+      return waitForBindApplication().then(() => {
+        expect(rangeText.textContent).to.equal('0 <= 47 <= 100');
+      });
+    });
+
+    it('should update dependent bindings on checkbox input changes', () => {
+      const checkboxText = fixture.doc.getElementById('checkboxText');
+      const checkbox = fixture.doc.getElementById('checkbox');
+      expect(checkboxText.textContent).to.equal('Unbound');
+      checkbox.click();
+      return waitForBindApplication().then(() => {
+        expect(checkboxText.textContent).to.equal('Checked: true');
+      });
+    });
+
+    it('should update dependent bindings on radio input changes', () => {
+      const radioText = fixture.doc.getElementById('radioText');
+      const radio = fixture.doc.getElementById('radio');
+      expect(radioText.textContent).to.equal('Unbound');
+      radio.click();
+      return waitForBindApplication().then(() => {
+        expect(radioText.textContent).to.equal('Checked: true');
       });
     });
   });

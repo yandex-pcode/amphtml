@@ -14,15 +14,10 @@
  * limitations under the License.
  */
 
-import {assertHttpsUrl, getFragment} from '../../../src/url';
-import {batchedXhrFor} from '../../../src/batched-xhr';
-import {getPath} from '../../../src/utils/object';
-import {getValueForExpr} from '../../../src/json';
+import {fetchBatchedJsonFor} from '../../../src/batched-json';
 import {isLayoutSizeDefined} from '../../../src/layout';
-import {templatesFor} from '../../../src/template';
-import {urlReplacementsForDoc} from '../../../src/url-replacements';
+import {templatesFor} from '../../../src/services';
 import {user} from '../../../src/log';
-
 
 /**
  * The implementation of `amp-list` component. See {@link ../amp-list.md} for
@@ -44,9 +39,6 @@ export class AmpList extends AMP.BaseElement {
     if (!this.container_.hasAttribute('role')) {
       this.container_.setAttribute('role', 'list');
     }
-
-    /** @private @const {!UrlReplacements} */
-    this.urlReplacements_ = urlReplacementsForDoc(this.getAmpDoc());
   }
 
   /** @override */
@@ -56,29 +48,16 @@ export class AmpList extends AMP.BaseElement {
 
   /** @override */
   layoutCallback() {
-    return this.urlReplacements_.expandAsync(assertHttpsUrl(
-        this.element.getAttribute('src'), this.element)).then(src => {
-          const opts = {};
-          if (this.element.hasAttribute('credentials')) {
-            opts.credentials = this.element.getAttribute('credentials');
-          }
-          if (!opts.credentials) {
-            opts.requireAmpResponseSourceOrigin = false;
-          }
-          const fetchPromise = batchedXhrFor(this.win).fetchJson(src, opts);
-          const fragment = getFragment(src).slice(1);
-          return fragment ?
-              fetchPromise.then(json => getPath(json, fragment)) :
-              fetchPromise;
-        }).then(data => {
-          user().assert(data != null, 'Response is undefined %s', this.element);
-          const itemsExpr = this.element.getAttribute('items') || 'items';
-          const items = getValueForExpr(data, itemsExpr);
+    const itemsExpr = this.element.getAttribute('items') || 'items';
+    return fetchBatchedJsonFor(
+        this.getAmpDoc(), this.element, itemsExpr).then(items => {
           user().assert(items && Array.isArray(items),
-              'Response must contain an array at "%s". %s %s',
-              itemsExpr, this.element, data);
+              'Response must contain an array at "%s". %s',
+              itemsExpr, this.element);
           return templatesFor(this.win).findAndRenderTemplateArray(
               this.element, items).then(this.rendered_.bind(this));
+        }, error => {
+          user().assert(false, error.message, this.element);
         });
   }
 

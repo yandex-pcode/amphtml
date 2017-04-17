@@ -16,10 +16,10 @@
 
 import {layoutRectLtwh} from '../layout-rect';
 import {registerServiceBuilder, getService} from '../service';
-import {resourcesForDoc} from '../resources';
-import {viewerForDoc} from '../viewer';
-import {viewportForDoc} from '../viewport';
-import {whenDocumentComplete, whenDocumentReady} from '../document-ready';
+import {resourcesForDoc} from '../services';
+import {viewerForDoc} from '../services';
+import {viewportForDoc} from '../services';
+import {whenDocumentComplete} from '../document-ready';
 import {urls} from '../config';
 import {getMode} from '../mode';
 import {isCanary} from '../experiments';
@@ -139,10 +139,14 @@ export class Performance {
     return channelPromise.then(() => {
       this.isMessagingReady_ = true;
 
-      // forward all queued ticks to the viewer since messaging
+      // Tick the "messaging ready" signal.
+      this.tickDelta('msr', this.win.Date.now() - this.initTime_);
+
+      // Forward all queued ticks to the viewer since messaging
       // is now ready.
       this.flushQueuedTicks_();
-      // send all csi ticks through.
+
+      // Send all csi ticks through.
       this.flush();
     });
   }
@@ -164,14 +168,12 @@ export class Performance {
       });
     }
 
-    // TODO(dvoytenko, #7815): switch back to the non-legacy version once the
-    // reporting regression is confirmed.
-    this.whenViewportLayoutCompleteLegacy_().then(() => {
+    this.whenViewportLayoutComplete_().then(() => {
       if (didStartInPrerender) {
         const userPerceivedVisualCompletenesssTime = docVisibleTime > -1
             ? (this.win.Date.now() - docVisibleTime)
-            : 1 /* MS (magic number for prerender was complete
-                   by the time the user opened the page) */;
+            //  Prerender was complete before visibility.
+            : 0;
         this.tickDelta('pc', userPerceivedVisualCompletenesssTime);
         this.prerenderComplete_(userPerceivedVisualCompletenesssTime);
       } else {
@@ -202,28 +204,6 @@ export class Performance {
   }
 
   /**
-   * TODO(dvoytenko, #7815): remove once the reporting regression is confirmed.
-   * @return {!Promise}
-   * @private
-   */
-  whenViewportLayoutCompleteLegacy_() {
-    const whenReadyToRetrieveResources = whenDocumentReady(this.win.document)
-        .then(() => {
-          // Two fold. First, resolve the promise to undefined.
-          // Second, causes a delay by introducing another async request
-          // (this `#then` block) so that Resources' onDocumentReady event
-          // is guaranteed to fire.
-        });
-    return whenReadyToRetrieveResources.then(() => {
-      return Promise.all(this.resources_.getResourcesInViewportLegacy(
-              /* isInPrerender */ true)
-          .map(r => {
-            return r.loadedOnce();
-          }));
-    });
-  }
-
-  /**
    * Ticks a timing event.
    *
    * @param {string} label The variable name as it will be reported.
@@ -238,7 +218,8 @@ export class Performance {
     const data = {
       label,
       value,
-      delta: opt_delta,
+      // Delta can be 0 or negative, but will always be changed to 1.
+      delta: opt_delta != null ? Math.max(opt_delta, 1) : undefined,
     };
     if (this.isMessagingReady_ && this.isPerformanceTrackingOn_) {
       this.viewer_.sendMessage('tick', data);
