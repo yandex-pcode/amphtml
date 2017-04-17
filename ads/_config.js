@@ -623,7 +623,7 @@ export const adConfig = {
   },
 
   yandex: {
-    prefetch: 'https://an.yandex.ru/system/context.js',
+    prefetch: 'https://yastatic.net/partner-code/loaders/context_amp.js',
     renderStartImplemented: true,
   },
 
