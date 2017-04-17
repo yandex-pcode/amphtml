@@ -315,9 +315,9 @@ register('yahoojp', yahoojp);
 register('yandex', yandex);
 register('yieldbot', yieldbot);
 register('yieldmo', yieldmo);
+register('zergnet', zergnet);
 register('yieldone', yieldone);
 register('zedo', zedo);
-register('zergnet', zergnet);
 register('zucks', zucks);
 
 // For backward compat, we always allow these types without the iframe
